@@ -21,7 +21,8 @@ jobs:
       - uses: actions/setup-python@v5      # Python kur
         with:
           python-version: "3.12"
-      - run: pip install requests          # gerekli kutuphane
+     - run: pip install requests playwright
+      - run: playwright install --with-deps chromium
       - run: python scraper.py             # robotu calistir
       - name: Sonuclari kaydet             # fiyatlar.csv'yi repoya isle
         run: |
