@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 5)
-# Yenilikler (surum 4 uzerine):
-#  - Trendyol: uc katmanli, taksit-gecirmez fiyat sokucu (gomulu veri > DOM > genel kalip)
-#  - fiyat_bul: taksit yazimlari temizlenir, kurussuz fiyatlar (2.090 TL) taninir
+# FIYAT RADARI - scraper.py (surum 6)
+# Yeni: Shopify urun adlari varyant sutununa yazilir; sipnjoylife ve Shopify
+# varyantlarina dogrudan varyant sayfasi linki uretilir.
 
 import csv
 import difflib
@@ -27,7 +26,6 @@ SUTUNLAR = ["tarih", "marka", "seri_adi", "varyant", "kategori1", "hacim",
 
 
 def slugla(metin):
-    """Metni link-benzeri hale getirir: 'Çocuk Suluğu' -> 'cocuk-sulugu'"""
     harfler = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosucgiosu")
     metin = metin.translate(harfler).lower()
     return re.sub(r"[^a-z0-9]+", "-", metin).strip("-")
@@ -42,7 +40,6 @@ def varyant_bul(url):
 
 
 def fiyat_bul(html):
-    """JSON-LD, olmazsa bilinen kaliplar, olmazsa taksitten arindirilmis TL yazimi."""
     for blok in re.findall(
         r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.S
     ):
@@ -66,7 +63,7 @@ def fiyat_bul(html):
     ) or re.search(r'"(?:discountedPrice|sellingPrice|price)"\s*:\s*([0-9]+(?:[.,][0-9]+)?)', html)
     if m:
         return float(m.group(1).replace(",", "."))
-    temiz = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", html)  # taksit yazimlarini sil
+    temiz = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", html)
     m = re.search(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", temiz)
     if m:
         return float(m.group(1).replace(".", "").replace(",", "."))
@@ -95,10 +92,7 @@ def tek_tek_cek(urun):
         return None, "baglanti_hatasi"
 
 
-# ---------------- SIPNJOYLIFE: varyant sokucu ----------------
-
 def gez(dugum):
-    """JSON agacindaki tum sozlukleri dolasan yardimci (recursive gezgin)."""
     if isinstance(dugum, dict):
         yield dugum
         for v in dugum.values():
@@ -108,9 +102,9 @@ def gez(dugum):
             yield from gez(v)
 
 
+# ---------------- SIPNJOYLIFE ----------------
+
 def nextdata_katalog(url):
-    """Sayfadaki __NEXT_DATA__ icinden tum urunleri cikarir:
-    {urun_slug: [(varyant_adi, fiyat), ...]}"""
     try:
         html = requests.get(url, headers=BASLIKLAR, timeout=30).text
     except requests.RequestException:
@@ -122,7 +116,6 @@ def nextdata_katalog(url):
         veri = json.loads(m.group(1))
     except json.JSONDecodeError:
         return None
-
     katalog = {}
     for d in gez(veri):
         if not (isinstance(d.get("variants"), list) and d.get("name") and d["variants"]):
@@ -147,12 +140,8 @@ def nextdata_katalog(url):
 
 
 def nextdata_iscisi(urunler, simdi):
-    """sipnjoylife tarzi siteler: katalogu bir kez cek, urunleri eslestir,
-    her varyanti ayri satir yaz. Olmazsa klasik yonteme don."""
     katalog = nextdata_katalog(urunler[0]["url"].strip())
     sonuclar = []
-
-    # Ayni urunun farkli ?Desen= linkleri tek sayfadir: yol bazinda tekille
     tekil = {}
     for u in urunler:
         yol = urlparse(u["url"].strip()).path
@@ -168,24 +157,30 @@ def nextdata_iscisi(urunler, simdi):
             if puan > 0.5:
                 eslesme = anahtar
         if eslesme:
+            # Varyant linki: orijinal linkteki parametre adini (Desen/Renk) koru
+            adres = urlparse(u["url"].strip())
+            parametre = "Renk" if "Renk" in parse_qs(adres.query) else "Desen"
+            taban = f"https://{adres.netloc}{yol}"
             for varyant_adi, fiyat in katalog[eslesme]:
-                sonuclar.append(kayit(u, simdi, fiyat, "ok", varyant=varyant_adi))
-            print(f"[nextdata] {u['seri_adi']}: {len(katalog[eslesme])} varyant alindi")
+                vurl = taban
+                if varyant_adi:
+                    vurl += f"?{parametre}={varyant_adi.replace(' ', '-')}"
+                sonuclar.append(kayit(u, simdi, fiyat, "ok",
+                                      varyant=varyant_adi, url=vurl))
+            print(f"[nextdata] {u['seri_adi']}: {len(katalog[eslesme])} varyant")
         else:
             f, durum = tek_tek_cek(u)
             if durum == "ok":
-                durum = "model_fiyati"  # varyant eslesmedi, genel fiyat alindi
+                durum = "model_fiyati"
             sonuclar.append(kayit(u, simdi, f, durum, varyant=""))
             print(f"[nextdata] {u['seri_adi']}: eslesme yok, {durum}")
             time.sleep(random.uniform(2, 4))
     return sonuclar
 
 
-# ---------------- TRENDYOL: cerezli bassiz tarayici + katmanli sokucu ----------------
+# ---------------- TRENDYOL ----------------
 
 def trendyol_fiyat_sok(sayfa):
-    """Uc katmanli fiyat sokucu. (fiyat, kaynak) doner."""
-    # KATMAN 1: sayfaya gomulu resmi urun verisi (en guvenilir)
     try:
         ham = sayfa.evaluate(
             "() => JSON.stringify(window.__PRODUCT_DETAIL_APP_INITIAL_STATE__ || null)")
@@ -197,7 +192,6 @@ def trendyol_fiyat_sok(sayfa):
                         return float(v["value"]), f"gomulu_{alan}"
     except Exception:
         pass
-    # KATMAN 2: fiyatin durdugu HTML elemanini hedefle
     for secici in ("span.prc-dsc", "[data-testid*='price']", "[class*='price-view']"):
         try:
             el = sayfa.locator(secici).first
@@ -208,7 +202,6 @@ def trendyol_fiyat_sok(sayfa):
                     return float(m.group(1).replace(".", "").replace(",", ".")), "dom"
         except Exception:
             continue
-    # KATMAN 3: taksitten arindirilmis genel TL taramasi
     f = fiyat_bul(sayfa.content())
     return (f, "genel_kalip") if f is not None else (None, None)
 
@@ -238,15 +231,17 @@ def trendyol_iscisi(urunler, simdi):
             except Exception:
                 durum = "baglanti_hatasi"
             sayfa.close()
-            sonuclar.append(kayit(u, simdi, fiyat, durum))
-            print(f"[trendyol] {u['seri_adi']} {varyant_bul(u['url'])}: {fiyat} "
-                  f"[{durum}, kaynak={kaynak}]")
+            # Trendyol'da model adi linkin icinde: varyant olarak yaz
+            yol = urlparse(u["url"].strip()).path.split("/")[-1]
+            model = re.sub(r"-p-\d+$", "", yol).replace("-", " ")
+            sonuclar.append(kayit(u, simdi, fiyat, durum, varyant=model))
+            print(f"[trendyol] {model[:40]}: {fiyat} [{durum}, kaynak={kaynak}]")
             time.sleep(random.uniform(2, 4))
         tarayici.close()
     return sonuclar
 
 
-# ---------------- SHOPIFY (popcorner) ve genel isci ----------------
+# ---------------- SHOPIFY (popcorner) ve genel ----------------
 
 def shopify_dokum_al(alan_adi):
     dokum = {}
@@ -261,9 +256,16 @@ def shopify_dokum_al(alan_adi):
                 break
             for u in urunler:
                 for v in u.get("variants", []):
-                    if v.get("price"):
-                        dokum.setdefault(u["handle"], []).append(
-                            (v.get("title", "") or "", float(v["price"])))
+                    if not v.get("price"):
+                        continue
+                    vt = (v.get("title") or "").strip()
+                    # "Default Title" ise urunun kendi adini kullan
+                    etiket = u.get("title", "") if vt.lower() in ("", "default title") else vt
+                    vurl = f"https://{alan_adi}/products/{u['handle']}"
+                    if vt and vt.lower() != "default title" and v.get("id"):
+                        vurl += f"?variant={v['id']}"
+                    dokum.setdefault(u["handle"], []).append(
+                        (etiket, float(v["price"]), vurl))
             time.sleep(2)
     except (requests.RequestException, ValueError):
         return dokum or None
@@ -286,8 +288,9 @@ def site_iscisi(alan_adi, urunler, simdi):
             parcalar = urlparse(url).path.split("/products/")
             handle = parcalar[1].split("/")[0].split("?")[0] if len(parcalar) > 1 else ""
             if handle in dokum:
-                for varyant_adi, fiyat in dokum[handle]:
-                    sonuclar.append(kayit(u, simdi, fiyat, "ok", varyant=varyant_adi))
+                for etiket, fiyat, vurl in dokum[handle]:
+                    sonuclar.append(kayit(u, simdi, fiyat, "ok",
+                                          varyant=etiket, url=vurl))
                 continue
         f, durum = tek_tek_cek(u)
         sonuclar.append(kayit(u, simdi, f, durum))
