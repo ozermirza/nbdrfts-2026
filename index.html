@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fiyat Radarı</title>
+<style>
+  /* ---- CSS: gorunum ---- */
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: #f4f5f7; color: #1c1e21; padding: 24px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .alt { color: #667; font-size: 13px; margin-bottom: 20px; }
+  .kartlar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+  .kart { background: #fff; border-radius: 10px; padding: 14px 18px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 150px; }
+  .kart .sayi { font-size: 26px; font-weight: 600; }
+  .kart .etiket { font-size: 12px; color: #667; }
+  .filtreler { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  select, input { padding: 8px 10px; border: 1px solid #ccd; border-radius: 8px;
+                  font-size: 14px; background: #fff; }
+  table { width: 100%; border-collapse: collapse; background: #fff;
+          border-radius: 10px; overflow: hidden;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  th { text-align: left; font-size: 12px; color: #667; padding: 10px 12px;
+       border-bottom: 1px solid #eee; }
+  td { padding: 10px 12px; border-bottom: 1px solid #f2f2f4; font-size: 14px; }
+  tr:last-child td { border-bottom: none; }
+  .rozet { display: inline-block; padding: 2px 8px; border-radius: 6px;
+           font-size: 12px; font-weight: 600; }
+  .dusus { background: #e6f7ed; color: #137a3d; }   /* indirim: yesil */
+  .artis { background: #fdf3dc; color: #9a6b00; }   /* zam: sari */
+  .hata  { color: #b33; font-size: 12px; }
+  .fiyat { font-weight: 600; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <h1>Fiyat Radarı</h1>
+  <div class="alt" id="sonGuncelleme">Veri yükleniyor...</div>
+
+  <div class="kartlar">
+    <div class="kart"><div class="sayi" id="kToplam">–</div><div class="etiket">Takip edilen kayıt</div></div>
+    <div class="kart"><div class="sayi" id="kDusen">–</div><div class="etiket">Fiyatı düşen</div></div>
+    <div class="kart"><div class="sayi" id="kArtan">–</div><div class="etiket">Fiyatı artan</div></div>
+    <div class="kart"><div class="sayi" id="kHata">–</div><div class="etiket">Okunamayan</div></div>
+  </div>
+
+  <div class="filtreler">
+    <select id="fMarka"><option value="">Tüm markalar</option></select>
+    <select id="fPlatform"><option value="">Tüm platformlar</option></select>
+    <select id="fDegisim">
+      <option value="">Hepsi</option>
+      <option value="dusus">Sadece indirimler</option>
+      <option value="artis">Sadece zamlar</option>
+    </select>
+    <input id="fAra" placeholder="Ara: seri, varyant...">
+  </div>
+
+  <table>
+    <thead><tr>
+      <th>Marka</th><th>Seri</th><th>Varyant</th><th>Hacim</th>
+      <th>Platform</th><th>Fiyat</th><th>Değişim</th>
+    </tr></thead>
+    <tbody id="tabloGovde"></tbody>
+  </table>
+
+<script>
+/* ---- JavaScript: veri ve mantik ---- */
+
+// Basit CSV okuyucu: metni satirlara, satirlari sutunlara boler
+function csvOku(metin) {
+  const satirlar = metin.trim().split("\n");
+  const basliklar = satirlar[0].split(",");
+  return satirlar.slice(1).map(s => {
+    const degerler = s.split(",");
+    const kayit = {};
+    basliklar.forEach((b, i) => kayit[b] = (degerler[i] || "").trim());
+    return kayit;
+  });
+}
+
+// Kayit icin benzersiz kimlik: ayni urunu turlar arasi eslestirmekte kullanilir
+const kimlik = k => [k.marka, k.seri_adi, k.varyant, k.hacim, k.platform].join("|");
+
+async function baslat() {
+  const cevap = await fetch("fiyatlar.csv?" + Date.now()); // ?Date.now() = onbellegi atla
+  const kayitlar = csvOku(await cevap.text());
+
+  // Turlari (tarihleri) bul, son ikisini sec
+  const turlar = [...new Set(kayitlar.map(k => k.tarih))].sort();
+  const sonTur = turlar[turlar.length - 1];
+  const oncekiTur = turlar[turlar.length - 2] || null;
+
+  const son = kayitlar.filter(k => k.tarih === sonTur);
+  const onceki = new Map(
+    kayitlar.filter(k => k.tarih === oncekiTur).map(k => [kimlik(k), k])
+  );
+
+  // Her kayda degisim bilgisi ekle
+  son.forEach(k => {
+    k.oncekiFiyat = null; k.yon = "";
+    const eski = onceki.get(kimlik(k));
+    if (eski && eski.fiyat && k.fiyat) {
+      const e = parseFloat(eski.fiyat), y = parseFloat(k.fiyat);
+      if (y < e) { k.yon = "dusus"; k.oncekiFiyat = e; }
+      if (y > e) { k.yon = "artis"; k.oncekiFiyat = e; }
+    }
+  });
+
+  // Ozet kartlari
+  document.getElementById("sonGuncelleme").textContent =
+    "Son güncelleme: " + sonTur + " (robot 2 saatte bir tarar)";
+  document.getElementById("kToplam").textContent = son.length;
+  document.getElementById("kDusen").textContent = son.filter(k => k.yon === "dusus").length;
+  document.getElementById("kArtan").textContent = son.filter(k => k.yon === "artis").length;
+  document.getElementById("kHata").textContent = son.filter(k => k.durum !== "ok").length;
+
+  // Filtre seceneklerini veriden uret
+  const doldur = (id, degerler) => {
+    const secim = document.getElementById(id);
+    [...new Set(degerler)].sort().forEach(d => {
+      const o = document.createElement("option"); o.value = o.textContent = d;
+      secim.appendChild(o);
+    });
+  };
+  doldur("fMarka", son.map(k => k.marka));
+  doldur("fPlatform", son.map(k => k.platform));
+
+  // Tabloyu cizen fonksiyon (filtreler her degistiginde yeniden calisir)
+  function ciz() {
+    const m = document.getElementById("fMarka").value;
+    const p = document.getElementById("fPlatform").value;
+    const d = document.getElementById("fDegisim").value;
+    const a = document.getElementById("fAra").value.toLowerCase();
+
+    const gorunen = son.filter(k =>
+      (!m || k.marka === m) && (!p || k.platform === p) &&
+      (!d || k.yon === d) &&
+      (!a || (k.seri_adi + " " + k.varyant).toLowerCase().includes(a))
+    );
+
+    document.getElementById("tabloGovde").innerHTML = gorunen.map(k => {
+      const fiyat = k.fiyat
+        ? parseFloat(k.fiyat).toLocaleString("tr-TR") + " TL"
+        : `<span class="hata">${k.durum}</span>`;
+      let rozet = "";
+      if (k.yon === "dusus")
+        rozet = `<span class="rozet dusus">▼ ${k.oncekiFiyat.toLocaleString("tr-TR")} → ${parseFloat(k.fiyat).toLocaleString("tr-TR")}</span>`;
+      if (k.yon === "artis")
+        rozet = `<span class="rozet artis">▲ ${k.oncekiFiyat.toLocaleString("tr-TR")} → ${parseFloat(k.fiyat).toLocaleString("tr-TR")}</span>`;
+      return `<tr><td>${k.marka}</td><td>${k.seri_adi}</td><td>${k.varyant}</td>
+        <td>${k.hacim}</td><td>${k.platform}</td>
+        <td class="fiyat"><a href="${k.url}" target="_blank" style="color:inherit">${fiyat}</a></td>
+        <td>${rozet}</td></tr>`;
+    }).join("");
+  }
+
+  // Filtreleri dinle
+  ["fMarka", "fPlatform", "fDegisim", "fAra"].forEach(id =>
+    document.getElementById(id).addEventListener("input", ciz));
+  ciz();
+}
+
+baslat().catch(h => {
+  document.getElementById("sonGuncelleme").textContent =
+    "Veri yüklenemedi: " + h.message;
+});
+</script>
+</body>
+</html>
