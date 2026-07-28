@@ -1,4 +1,4 @@
-marka,urun_adi,kategori1,hacim,kategori2,platform,url
+marka,seri_adi,kategori1,hacim,kategori2,platform,url
 Sipnjoy,FlipSip,cocuk termos,360ml,termos,sipnjoylife,https://sipnjoylife.com/flipsip-paslanmaz-celik-cocuk-su-termosu-matarasi-suluk-360-ml-sipnjoy-sipnjoylife?Desen=Adventure-Trails
 Sipnjoy,FlipSip,cocuk termos,360ml,termos,sipnjoylife,https://sipnjoylife.com/flipsip-paslanmaz-celik-cocuk-su-termosu-matarasi-suluk-360-ml-sipnjoy-sipnjoylife?Desen=Bee-Honey
 Sipnjoy,FlipSip,cocuk termos,360ml,termos,sipnjoylife,https://sipnjoylife.com/flipsip-paslanmaz-celik-cocuk-su-termosu-matarasi-suluk-360-ml-sipnjoy-sipnjoylife?Desen=Bee-Honey
@@ -57,8 +57,44 @@ Sipnjoy,Flipsip,cocuk termos,360ml,termos,Hepsiburada,https://www.hepsiburada.co
 Sipnjoy,SippyPals,cocuk termos,360ml,termos,Hepsiburada,https://www.hepsiburada.com/sipnjoy-sippypals-cocuk-su-termosu-360-ml-mor-pm-HBC0000G0K8E5?magaza=SipnJoy
 Sipnjoy,SippyPals,cocuk termos,360ml,termos,Hepsiburada,https://www.hepsiburada.com/sipnjoy-sippypals-cocuk-su-termosu-360-ml-koyu-mavi-pm-HBC0000C5G4SC?magaza=SipnJoy
 Sipnjoy,Widewonder,cocuk termos,420ml,termos,Hepsiburada,https://www.hepsiburada.com/sipnjoy-widewonder-cocuk-su-termosu-420-ml-swan-harmony-pm-HBC0000G0K8E3?magaza=SipnJoy
-
-
-
-
+Trixie,Termos,cocuk termos,350ml,termos,popcorner,https://popcorner.com.tr/collections/trixie-termos-sise/products/trixie-insulated-drinking-bottle-350ml-mr-fox
+Trixie,Termos,cocuk termos,350ml,termos,popcorner,https://popcorner.com.tr/collections/trixie-termos-sise/products/trixie-insulated-drinking-bottle-350ml-mrs-cat
+Trixie,Termos,cocuk termos,350ml,termos,popcorner,https://popcorner.com.tr/collections/trixie-termos-sise/products/trixie-insulated-drinking-bottle-350ml-mrs-unicorn
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-mrs-rabbit-350ml-su-sisesi
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mr-dino-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-mrs-butterfly-350-ml-su-sisesi
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-mr-lion-350ml-su-sisesi
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-mrs-mouse-350ml-su-sisesi
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mrs-unicorn-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mrs-cat-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-bottle-350ml-mr-triceratops
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-bottle-350ml-mr-dragon
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mr-shark-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-mr-tiger-350ml-su-sisesi
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mr-parrot-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mr-fox-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mr-crocodile-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-mr-bear-350-ml-su-sisesi
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/frog-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-bottle-350ml-mrs-peacock
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/mrs-bumblebee-trixie-bottle-350ml-40-200
+Trixie,Matara,cocuk matara,350ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-350-ml-su-siseleri/products/trixie-bottle-350ml-mr-alligator
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mrs-butterfly-500-ml-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mrs-rabbit-500ml-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/mr-dino-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mrs-mouse-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mrs-elephant-500ml-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/cat-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mr-lion-500ml-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mr-triceratops-500-ml-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/mr-shark-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/mrs-unicorn-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-mr-dragon-500-ml-su-sisesi
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/mr-parrot-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/mr-fox-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/mrs-bumblebee-trixie-bottle-500ml-41-200
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-bottle-500ml-mr-bear
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-bottle-500ml-mrs-peacock
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,https://popcorner.com.tr/collections/trixie-500-ml-su-siseleri/products/trixie-bottle-500ml-mr-alligator
+Trixie,Matara,cocuk matara,500ml,matara,popcorner,
 
