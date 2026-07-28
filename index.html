@@ -5,57 +5,87 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fiyat Radarı</title>
 <style>
+  :root {  /* koyu tema (varsayilan) */
+    --zemin: #14161a; --yuzey: #1d2026; --yuzey2: #23262d;
+    --metin: #e8eaed; --soluk: #9aa0a8; --cizgi: #2d3138;
+    --vurgu: #4f8cff; --golge: 0 1px 4px rgba(0,0,0,.4);
+  }
+  body.acik {
+    --zemin: #f4f5f7; --yuzey: #ffffff; --yuzey2: #f7f8fa;
+    --metin: #1c1e21; --soluk: #66707a; --cizgi: #e7e9ee;
+    --vurgu: #2f6bdf; --golge: 0 1px 3px rgba(0,0,0,.08);
+  }
   * { box-sizing: border-box; margin: 0; }
   body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-         background: #f4f5f7; color: #1c1e21; padding: 20px; }
-  h1 { font-size: 22px; }
-  .alt { color: #667; font-size: 13px; margin: 4px 0 16px; }
-  .kartlar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .kart { background: #fff; border-radius: 10px; padding: 12px 16px;
-          box-shadow: 0 1px 3px rgba(0,0,0,.08); min-width: 140px; }
-  .kart .sayi { font-size: 24px; font-weight: 600; }
-  .kart .etiket { font-size: 12px; color: #667; }
+         background: var(--zemin); color: var(--metin); padding: 20px;
+         transition: background .2s, color .2s; }
+  .ust { display: flex; justify-content: space-between; align-items: center; }
+  h1 { font-size: 21px; font-weight: 650; letter-spacing: .2px; }
+  .alt { color: var(--soluk); font-size: 13px; margin: 4px 0 18px; }
+  .btn { border: 1px solid var(--cizgi); background: var(--yuzey);
+         color: var(--metin); border-radius: 8px; padding: 7px 12px;
+         font-size: 13px; cursor: pointer; }
+  .btn:hover { border-color: var(--vurgu); color: var(--vurgu); }
+  .btnMini { border: 1px solid var(--cizgi); background: var(--yuzey2);
+             color: var(--soluk); border-radius: 6px; padding: 2px 8px;
+             font-size: 11px; cursor: pointer; text-transform: none; }
+  .btnMini:hover { border-color: var(--vurgu); color: var(--vurgu); }
+
+  .kartlar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .kart { background: var(--yuzey); border: 1px solid var(--cizgi);
+          border-radius: 12px; padding: 12px 18px; min-width: 140px;
+          box-shadow: var(--golge); }
+  .kart .sayi { font-size: 24px; font-weight: 650; }
+  .kart .etiket { font-size: 12px; color: var(--soluk); margin-top: 2px; }
 
   .duzen { display: flex; gap: 16px; align-items: flex-start; }
-  .panel { background: #fff; border-radius: 10px; padding: 14px;
-           box-shadow: 0 1px 3px rgba(0,0,0,.08); width: 210px; flex-shrink: 0;
-           position: sticky; top: 12px; }
-  .panel h3 { font-size: 12px; text-transform: uppercase; color: #667;
-              margin: 10px 0 6px; }
+  .panel { background: var(--yuzey); border: 1px solid var(--cizgi);
+           border-radius: 12px; padding: 14px; width: 215px; flex-shrink: 0;
+           position: sticky; top: 12px; box-shadow: var(--golge); }
+  .panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+              color: var(--soluk); margin: 14px 0 6px;
+              display: flex; justify-content: space-between; align-items: center;
+              gap: 6px; }
   .panel h3:first-child { margin-top: 0; }
   .panel label { display: block; font-size: 13px; padding: 3px 0; cursor: pointer; }
-  .kaldir { border: none; background: none; color: #4a6cf7; font-size: 11px;
-            cursor: pointer; padding: 0; text-transform: none; }
-  .kaldir:hover { text-decoration: underline; }
-  .panel input[type=text] { width: 100%; padding: 7px 9px; border: 1px solid #ccd;
-                            border-radius: 7px; font-size: 13px; margin-bottom: 4px; }
+  .panel input[type=checkbox] { accent-color: var(--vurgu); }
+  .panel input[type=text] { width: 100%; padding: 7px 9px; border: 1px solid var(--cizgi);
+                            border-radius: 7px; font-size: 13px; margin-bottom: 6px;
+                            background: var(--yuzey2); color: var(--metin); }
+  .grupBtn { display: flex; gap: 4px; }
 
   .tabloKap { flex: 1; overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; background: #fff;
-          border-radius: 10px; overflow: hidden; table-layout: fixed;
-          box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  th { text-align: left; font-size: 12px; color: #667; padding: 10px 12px;
-       border-bottom: 1px solid #eee; cursor: pointer; position: relative;
+  table { width: 100%; border-collapse: collapse; background: var(--yuzey);
+          border: 1px solid var(--cizgi); border-radius: 12px; overflow: hidden;
+          table-layout: fixed; box-shadow: var(--golge); }
+  th { text-align: left; font-size: 12px; color: var(--soluk); padding: 11px 12px;
+       border-bottom: 1px solid var(--cizgi); cursor: pointer; position: relative;
        user-select: none; white-space: nowrap; overflow: hidden; }
+  th:hover { color: var(--vurgu); }
   th .tutamac { position: absolute; right: 0; top: 0; bottom: 0; width: 6px;
                 cursor: col-resize; }
-  td { padding: 9px 12px; border-bottom: 1px solid #f2f2f4; font-size: 14px;
+  td { padding: 9px 12px; border-bottom: 1px solid var(--cizgi); font-size: 14px;
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
-  tr.detay td { background: #fafbfd; font-size: 13px; }
-  tr.detay td:first-child { padding-left: 28px; color: #556; }
+  tr.detay td { background: var(--yuzey2); font-size: 13px; }
+  tr.detay td:first-child { padding-left: 28px; color: var(--soluk); }
   .rozet { display: inline-block; padding: 2px 8px; border-radius: 6px;
            font-size: 12px; font-weight: 600; }
-  .dusus { background: #e6f7ed; color: #137a3d; }
-  .artis { background: #fdf3dc; color: #9a6b00; }
-  .hata  { color: #b33; font-size: 12px; }
+  .dusus { background: rgba(35,165,90,.16); color: #3fbf74; }
+  .artis { background: rgba(230,170,30,.16); color: #d9a52a; }
+  body.acik .dusus { background: #e6f7ed; color: #137a3d; }
+  body.acik .artis { background: #fdf3dc; color: #9a6b00; }
+  .hata { color: #d66; font-size: 12px; }
   .fiyat { font-weight: 600; }
   .fiyat a { color: inherit; }
-  .adet { color: #889; font-size: 12px; font-weight: 400; }
+  .adet { color: var(--soluk); font-size: 12px; font-weight: 400; }
 </style>
 </head>
 <body>
-  <h1>Fiyat Radarı</h1>
+  <div class="ust">
+    <h1>Fiyat Radarı</h1>
+    <button class="btn" id="temaBtn">☀ Açık tema</button>
+  </div>
   <div class="alt" id="sonGuncelleme">Veri yükleniyor...</div>
 
   <div class="kartlar">
@@ -67,27 +97,21 @@
   </div>
 
   <div class="duzen">
-    <div class="panel" id="filtrePanel">
+    <div class="panel">
       <h3>Ara</h3>
       <input type="text" id="fAra" placeholder="seri, model, varyant...">
       <label><input type="checkbox" id="fDegisen"> Sadece değişenler</label>
-      <h3>Marka <button class="kaldir" data-hedef="fMarka">seçimleri kaldır</button></h3>
-      <div id="fMarka"></div>
-      <h3>Platform <button class="kaldir" data-hedef="fPlatform">seçimleri kaldır</button></h3>
-      <div id="fPlatform"></div>
-      <h3>Hacim <button class="kaldir" data-hedef="fHacim">seçimleri kaldır</button></h3>
-      <div id="fHacim"></div>
+      <div id="filtreAlan"></div>
     </div>
-
     <div class="tabloKap">
-      <table id="tablo">
+      <table>
         <thead><tr>
           <th data-k="marka">Marka<span class="tutamac"></span></th>
           <th data-k="seri_adi">Seri<span class="tutamac"></span></th>
           <th data-k="hacim">Hacim<span class="tutamac"></span></th>
           <th data-k="platform">Platform<span class="tutamac"></span></th>
           <th data-k="fiyat">Fiyat<span class="tutamac"></span></th>
-          <th data-k="">Değişim / Detay<span class="tutamac"></span></th>
+          <th data-k="degisim">Değişim / Detay<span class="tutamac"></span></th>
         </tr></thead>
         <tbody id="tabloGovde"></tbody>
       </table>
@@ -105,24 +129,29 @@ function csvOku(metin) {
   });
 }
 const tl = x => parseFloat(x).toLocaleString("tr-TR") + " TL";
-const kimlik = k => [k.marka, k.seri_adi, k.varyant, k.hacim, k.platform].join("|");
-const grupKimlik = k => [k.marka, k.seri_adi, k.hacim, k.platform].join("|");
+const kimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.varyant, k.hacim, k.platform].join("|");
+const grupKimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.hacim, k.platform].join("|");
 
-// Linkten okunur model adi cikar: .../trixie-mrs-mouse-350ml -> "trixie mrs mouse 350ml"
 function linktenModel(url) {
   try {
-    const yol = new URL(url).pathname.split("/").filter(Boolean).pop() || "";
-    return yol.split("?")[0].replace(/-/g, " ").replace(/\s+p \d+$/, "");
+    let yol = new URL(url).pathname;
+    if (yol.includes("/products/")) yol = yol.split("/products/")[1];
+    const parca = yol.split("/").filter(Boolean).pop() || "";
+    return parca.replace(/-/g, " ").replace(/\s+p \d+$/, "");
   } catch { return ""; }
 }
-// Varyant etiketi: anlamliysa varyant, degilse linkten model
 function etiket(k) {
   const v = (k.varyant || "").trim();
   if (v && v.toLowerCase() !== "default title") return v;
-  return linktenModel(k.url);
+  return linktenModel(k.url) || "(model bilinmiyor)";
 }
 
+// Filtre boyutlari: alan adi -> gruptaki karsiligi
+const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür": "tur" };
 let gruplar = [], siralama = { k: null, yon: 1 };
+let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };  // deger -> false ise kapali
+
+const aktif = (b, d) => durumlar[b][d] !== false;
 
 async function baslat() {
   const kayitlar = csvOku(await (await fetch("fiyatlar.csv?" + Date.now())).text());
@@ -142,7 +171,6 @@ async function baslat() {
     }
   });
 
-  // Gruplama: marka+seri+hacim+platform
   const sozluk = new Map();
   son.forEach(k => {
     if (!sozluk.has(grupKimlik(k))) sozluk.set(grupKimlik(k), []);
@@ -151,83 +179,97 @@ async function baslat() {
   gruplar = [...sozluk.values()].map(uyeler => {
     const ilk = uyeler[0];
     const fiyatli = uyeler.filter(u => u.fiyat);
-    // Mod fiyat: en cok tekrar eden fiyat = grubun "normal" fiyati
     const sayac = {};
     fiyatli.forEach(u => sayac[u.fiyat] = (sayac[u.fiyat] || 0) + 1);
     const mod = Object.keys(sayac).sort((a, b) => sayac[b] - sayac[a])[0] || null;
-    // Detaya dusecekler: mod disinda fiyati olan VEYA fiyati degisen varyantlar
     const detaylar = uyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon);
     return {
       marka: ilk.marka, seri_adi: ilk.seri_adi, hacim: ilk.hacim,
-      platform: ilk.platform, fiyat: mod, adet: uyeler.length,
+      platform: ilk.platform, tur: (ilk.kategori2 || "").toLowerCase(),
+      fiyat: mod, adet: uyeler.length,
       durum: fiyatli.length ? "ok" : ilk.durum,
-      url: ilk.url, uyeler, detaylar
+      url: ilk.url, uyeler, detaylar,
+      degisenSayi: uyeler.filter(u => u.yon).length
     };
   });
 
-  // Ozet kartlar
   document.getElementById("sonGuncelleme").textContent =
-    "Son güncelleme: " + sonTur + " (robot 2 saatte bir tarar)";
+    "Son güncelleme: " + sonTur + " · robot 2 saatte bir tarar";
   document.getElementById("kGrup").textContent = gruplar.length;
   document.getElementById("kKayit").textContent = son.length;
   document.getElementById("kDusen").textContent = son.filter(k => k.yon === "dusus").length;
   document.getElementById("kArtan").textContent = son.filter(k => k.yon === "artis").length;
   document.getElementById("kHata").textContent = son.filter(k => k.durum !== "ok").length;
 
-  // Filtre kutucuklari
-  const kutular = (id, degerler) => {
-    const kap = document.getElementById(id);
-    [...new Set(degerler)].sort().forEach(d => {
-      const l = document.createElement("label");
-      l.innerHTML = `<input type="checkbox" value="${d}" checked> ${d}`;
-      kap.appendChild(l);
-    });
-  };
-  kutular("fMarka", gruplar.map(g => g.marka));
-  kutular("fHacim", gruplar.map(g => g.hacim));
-  kutular("fPlatform", gruplar.map(g => g.platform));
-  document.getElementById("filtrePanel").addEventListener("input", ciz);
+  document.getElementById("fAra").addEventListener("input", ciz);
+  document.getElementById("fDegisen").addEventListener("input", ciz);
   document.querySelectorAll("th[data-k]").forEach(th =>
     th.addEventListener("click", e => {
-      if (e.target.classList.contains("tutamac") || !th.dataset.k) return;
+      if (e.target.classList.contains("tutamac")) return;
       siralama.yon = siralama.k === th.dataset.k ? -siralama.yon : 1;
       siralama.k = th.dataset.k; ciz();
     }));
-
-  // "Secimleri kaldir" dugmeleri: ilk basista tumunu kaldirir,
-  // hepsi zaten kapaliysa tumunu geri acar (sifirla gibi calisir)
-  document.querySelectorAll(".kaldir").forEach(btn =>
-    btn.addEventListener("click", () => {
-      const kutucuklar = document.querySelectorAll(`#${btn.dataset.hedef} input`);
-      const hepsiKapali = [...kutucuklar].every(k => !k.checked);
-      kutucuklar.forEach(k => k.checked = hepsiKapali);
-      ciz();
-    }));
-
   sutunGenislet();
+  temaKur();
   ciz();
 }
 
-function secili(id) {
-  return [...document.querySelectorAll(`#${id} input:checked`)].map(i => i.value);
+// Kaskad: bu boyutun seceneklerini, DIGER boyutlarin secimlerine gore daralt
+function secenekler(boyut) {
+  const uygun = gruplar.filter(g =>
+    Object.values(BOYUTLAR).every(b => b === boyut || aktif(b, g[b])));
+  return [...new Set(uygun.map(g => g[boyut]))].sort();
+}
+
+function panelCiz() {
+  const alan = document.getElementById("filtreAlan");
+  alan.innerHTML = Object.entries(BOYUTLAR).map(([baslikAd, boyut]) => {
+    const kutular = secenekler(boyut).map(d =>
+      `<label><input type="checkbox" data-boyut="${boyut}" value="${d}"
+        ${aktif(boyut, d) ? "checked" : ""}> ${d}</label>`).join("");
+    return `<h3>${baslikAd}
+      <span class="grupBtn">
+        <button class="btnMini" data-tum="${boyut}">tümü</button>
+        <button class="btnMini" data-temizle="${boyut}">temizle</button>
+      </span></h3>${kutular || '<span class="adet">seçenek yok</span>'}`;
+  }).join("");
+
+  alan.querySelectorAll("input[data-boyut]").forEach(k =>
+    k.addEventListener("change", () => {
+      durumlar[k.dataset.boyut][k.value] = k.checked; ciz();
+    }));
+  alan.querySelectorAll("[data-tum]").forEach(b =>
+    b.addEventListener("click", () => {
+      secenekler(b.dataset.tum).forEach(d => durumlar[b.dataset.tum][d] = true);
+      ciz();
+    }));
+  alan.querySelectorAll("[data-temizle]").forEach(b =>
+    b.addEventListener("click", () => {
+      secenekler(b.dataset.temizle).forEach(d => durumlar[b.dataset.temizle][d] = false);
+      ciz();
+    }));
 }
 
 function ciz() {
-  const m = secili("fMarka"), h = secili("fHacim"), p = secili("fPlatform");
+  panelCiz();
   const ara = document.getElementById("fAra").value.toLowerCase();
   const sadeceDegisen = document.getElementById("fDegisen").checked;
 
   let liste = gruplar.filter(g =>
-    m.includes(g.marka) && h.includes(g.hacim) && p.includes(g.platform) &&
-    (!sadeceDegisen || g.detaylar.some(d => d.yon)) &&
+    Object.values(BOYUTLAR).every(b => aktif(b, g[b])) &&
+    (!sadeceDegisen || g.degisenSayi > 0) &&
     (!ara || (g.marka + " " + g.seri_adi + " " +
               g.uyeler.map(etiket).join(" ")).toLowerCase().includes(ara))
   );
   if (siralama.k) {
     liste = [...liste].sort((a, b) => {
+      if (siralama.k === "degisim")
+        return (b.degisenSayi + b.detaylar.length / 100
+              - a.degisenSayi - a.detaylar.length / 100) * siralama.yon;
       const x = a[siralama.k] || "", y = b[siralama.k] || "";
       const nx = parseFloat(x), ny = parseFloat(y);
-      const s = (!isNaN(nx) && !isNaN(ny)) ? nx - ny : String(x).localeCompare(String(y), "tr");
+      const s = (!isNaN(nx) && !isNaN(ny)) ? nx - ny
+              : String(x).localeCompare(String(y), "tr");
       return s * siralama.yon;
     });
   }
@@ -256,7 +298,20 @@ function ciz() {
   }).join("");
 }
 
-// Sutun genisligi surukleme (Excel usulu)
+function temaKur() {
+  const btn = document.getElementById("temaBtn");
+  const uygula = acik => {
+    document.body.classList.toggle("acik", acik);
+    btn.textContent = acik ? "☾ Koyu tema" : "☀ Açık tema";
+    try { localStorage.setItem("tema", acik ? "acik" : "koyu"); } catch {}
+  };
+  let kayitli = null;
+  try { kayitli = localStorage.getItem("tema"); } catch {}
+  uygula(kayitli === "acik");
+  btn.addEventListener("click", () =>
+    uygula(!document.body.classList.contains("acik")));
+}
+
 function sutunGenislet() {
   document.querySelectorAll("th .tutamac").forEach(t => {
     t.addEventListener("mousedown", e => {
@@ -272,7 +327,4 @@ function sutunGenislet() {
 }
 
 baslat().catch(h => document.getElementById("sonGuncelleme").textContent =
-  "Veri yüklenemedi: " + h.message);
-</script>
-</body>
-</html>
+  "Veri yüklenemedi: " +
