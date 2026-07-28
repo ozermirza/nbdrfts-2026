@@ -142,7 +142,7 @@ async function baslat() {
     if (!sozluk.has(grupKimlik(k))) sozluk.set(grupKimlik(k), []);
     sozluk.get(grupKimlik(k)).push(k);
   });
-  gruplar = [...sozluk.values()].map(uyeler = uyeler => {
+  gruplar = [...sozluk.values()].map(uyeler => {
     const ilk = uyeler[0];
     const fiyatli = uyeler.filter(u => u.fiyat);
     // Mod fiyat: en cok tekrar eden fiyat = grubun "normal" fiyati
