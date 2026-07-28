@@ -18,12 +18,15 @@
 
   .duzen { display: flex; gap: 16px; align-items: flex-start; }
   .panel { background: #fff; border-radius: 10px; padding: 14px;
-           box-shadow: 0 1px 3px rgba(0,0,0,.08); width: 200px; flex-shrink: 0;
+           box-shadow: 0 1px 3px rgba(0,0,0,.08); width: 210px; flex-shrink: 0;
            position: sticky; top: 12px; }
   .panel h3 { font-size: 12px; text-transform: uppercase; color: #667;
               margin: 10px 0 6px; }
   .panel h3:first-child { margin-top: 0; }
   .panel label { display: block; font-size: 13px; padding: 3px 0; cursor: pointer; }
+  .kaldir { border: none; background: none; color: #4a6cf7; font-size: 11px;
+            cursor: pointer; padding: 0; text-transform: none; }
+  .kaldir:hover { text-decoration: underline; }
   .panel input[type=text] { width: 100%; padding: 7px 9px; border: 1px solid #ccd;
                             border-radius: 7px; font-size: 13px; margin-bottom: 4px; }
 
@@ -68,9 +71,12 @@
       <h3>Ara</h3>
       <input type="text" id="fAra" placeholder="seri, model, varyant...">
       <label><input type="checkbox" id="fDegisen"> Sadece değişenler</label>
-      <h3>Marka</h3><div id="fMarka"></div>
-      <h3>Hacim</h3><div id="fHacim"></div>
-      <h3>Platform</h3><div id="fPlatform"></div>
+      <h3>Marka <button class="kaldir" data-hedef="fMarka">seçimleri kaldır</button></h3>
+      <div id="fMarka"></div>
+      <h3>Platform <button class="kaldir" data-hedef="fPlatform">seçimleri kaldır</button></h3>
+      <div id="fPlatform"></div>
+      <h3>Hacim <button class="kaldir" data-hedef="fHacim">seçimleri kaldır</button></h3>
+      <div id="fHacim"></div>
     </div>
 
     <div class="tabloKap">
@@ -187,6 +193,17 @@ async function baslat() {
       siralama.yon = siralama.k === th.dataset.k ? -siralama.yon : 1;
       siralama.k = th.dataset.k; ciz();
     }));
+
+  // "Secimleri kaldir" dugmeleri: ilk basista tumunu kaldirir,
+  // hepsi zaten kapaliysa tumunu geri acar (sifirla gibi calisir)
+  document.querySelectorAll(".kaldir").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const kutucuklar = document.querySelectorAll(`#${btn.dataset.hedef} input`);
+      const hepsiKapali = [...kutucuklar].every(k => !k.checked);
+      kutucuklar.forEach(k => k.checked = hepsiKapali);
+      ciz();
+    }));
+
   sutunGenislet();
   ciz();
 }
