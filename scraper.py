@@ -321,12 +321,15 @@ def trendyol_iscisi(urunler, simdi):
 
                 # 1) Buy-box: DOM fiyati + sayfadaki satici cumlesi
                 #    (bulamazsa bir kez daha bekleyip dener)
-                dom_fiyat = trendyol_dom_fiyat(sayfa)
-                dom_satici = dom_satici_bul(sayfa)
-                if dom_fiyat is None:
-                    sayfa.wait_for_timeout(5000)
+                # Buy-box'i sabirla bekle: dene, kaydir, bekle, tekrar dene
+                dom_fiyat, dom_satici = None, ""
+                for deneme in range(4):
                     dom_fiyat = trendyol_dom_fiyat(sayfa)
                     dom_satici = dom_satici or dom_satici_bul(sayfa)
+                    if dom_fiyat is not None:
+                        break
+                    sayfa.evaluate("window.scrollTo(0, document.body.scrollHeight/3)")
+                    sayfa.wait_for_timeout(3000)
 
                 # 2) Yan panel: envoy deposundan diger saticilar
                 envoy = envoy_depo_listesi(sayfa) or []
