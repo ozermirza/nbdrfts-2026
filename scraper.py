@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 8)
-# Yeni: Trendyol'un yeni altyapisi icin depo-avcisi sokucu — tum PROPS/STATE
-# depolarini tarar, satici+fiyat tasiyan dugumu bulur. (surum 7: satici sutunu,
-# ana satici / "diger satici" ayrimi, ustu cizili fiyat duzeltmesi)
+# FIYAT RADARI - scraper.py (surum 9)
+# Yeni: Trendyol'da uc kanalli okuma:
+#   1) API dinleyici (sayfanin kendi arka plan isteginden satici+fiyat)
+#   2) envoy deposu (yan paneldeki "diger saticilar")
+#   3) DOM fiyat kutusu (buy-box yedegi)
+# Boylece one cikan satici + diger saticilar birlikte yakalanir.
 
 import csv
 import difflib
@@ -25,9 +27,7 @@ TURKIYE_SAATI = timezone(timedelta(hours=3))
 SUTUNLAR = ["tarih", "marka", "seri_adi", "varyant", "kategori1", "hacim",
             "kategori2", "platform", "fiyat", "durum", "url", "satici"]
 
-# Markalarin resmi/ana saticilari (kucuk harf, bosluksuz yazilir).
-# Yeni marka ekledikce buraya ana saticisini ekle; listede olmayan herkes
-# "diger satici" olarak kaydedilir.
+# Markalarin resmi/ana saticilari (kucuk harf, bosluksuz).
 ANA_SATICILAR = {"popcorner", "sipnjoy"}
 
 
@@ -205,10 +205,39 @@ def _fiyat_alanindan(d):
     return None
 
 
-def trendyol_satici_dokumu(sayfa):
-    """Yeni Trendyol altyapisi: tum PROPS/STATE depolarini topla, icinde
-    satici+fiyat bilgisi tasiyan dugumu bul. [(satici, fiyat), ...] doner,
-    ilk eleman one cikan saticidir. Ayrica hangi depodan geldigini yazdirir."""
+def satici_listesi_cikar(veri):
+    """Herhangi bir JSON agacindan [(satici, fiyat), ...] cikarir.
+    Ilk eleman, bulunabildiyse one cikan (buy-box) saticidir."""
+    kazanan = None
+    for d in gez(veri):
+        if isinstance(d.get("otherMerchants"), list) and "merchant" in d:
+            kazanan = d
+            break
+    if kazanan is None:
+        for d in gez(veri):
+            if isinstance(d.get("merchant"), dict) and _fiyat_alanindan(d) is not None:
+                kazanan = d
+                kazanan.setdefault("otherMerchants", [])
+                break
+    if kazanan is None:
+        return None
+    liste = []
+    ad = (kazanan.get("merchant") or {}).get("name") or ""
+    f = _fiyat_alanindan(kazanan)
+    if f is not None:
+        liste.append((ad, f))
+    for o in kazanan.get("otherMerchants", []):
+        if not isinstance(o, dict):
+            continue
+        oad = (o.get("merchant") or {}).get("name") or ""
+        of = _fiyat_alanindan(o)
+        if of is not None:
+            liste.append((oad, of))
+    return liste or None
+
+
+def envoy_depo_listesi(sayfa):
+    """Sayfadaki PROPS/STATE depolarindan satici listesi cikarir (yan panel)."""
     try:
         ham = sayfa.evaluate("""() => {
             const out = {};
@@ -224,41 +253,15 @@ def trendyol_satici_dokumu(sayfa):
         depolar = json.loads(ham)
     except Exception:
         return None
-
-    for depo_adi, depo in depolar.items():
-        kazanan = None
-        for d in gez(depo):
-            if isinstance(d.get("otherMerchants"), list) and "merchant" in d:
-                kazanan = d
-                break
-        if kazanan is None:  # tek saticili urun: merchant + fiyat tasiyan dugum
-            for d in gez(depo):
-                if isinstance(d.get("merchant"), dict) and _fiyat_alanindan(d) is not None:
-                    kazanan = d
-                    kazanan.setdefault("otherMerchants", [])
-                    break
-        if kazanan is None:
-            continue
-        liste = []
-        ad = (kazanan.get("merchant") or {}).get("name") or ""
-        f = _fiyat_alanindan(kazanan)
-        if f is not None:
-            liste.append((ad, f))
-        for o in kazanan.get("otherMerchants", []):
-            if not isinstance(o, dict):
-                continue
-            oad = (o.get("merchant") or {}).get("name") or ""
-            of = _fiyat_alanindan(o)
-            if of is not None:
-                liste.append((oad, of))
+    for depo in depolar.values():
+        liste = satici_listesi_cikar(depo)
         if liste:
-            print(f"    (veri deposu: {depo_adi})")
             return liste
     return None
 
 
 def trendyol_dom_fiyat(sayfa):
-    """Yedek: fiyat kutusundaki TL degerlerinin en kucugu (ustu cizili eskiyi eler)."""
+    """Buy-box yedegi: fiyat kutusundaki TL degerlerinin en kucugu."""
     for secici in ("div[class*='price']", "span.prc-dsc", "[data-testid*='price']"):
         try:
             el = sayfa.locator(secici).first
@@ -289,38 +292,68 @@ def trendyol_iscisi(urunler, simdi):
             sayfa = baglam.new_page()
             yol = urlparse(u["url"].strip()).path.split("/")[-1]
             model = re.sub(r"-p-\d+$", "", yol).replace("-", " ")
+
+            # API dinleyici: sayfanin arka plan isteklerinden urun verisini yakala
+            yakalananlar = []
+            def yanit_topla(yanit):
+                try:
+                    if "json" not in (yanit.headers.get("content-type") or ""):
+                        return
+                    govde = yanit.text()
+                    if '"merchant"' in govde and (
+                        '"otherMerchants"' in govde or '"sellingPrice"' in govde
+                        or '"discountedPrice"' in govde
+                    ):
+                        yakalananlar.append(json.loads(govde))
+                except Exception:
+                    pass
+            sayfa.on("response", yanit_topla)
+
             try:
                 sayfa.goto(u["url"].strip(), timeout=60000, wait_until="domcontentloaded")
-                sayfa.wait_for_timeout(5000)
+                sayfa.wait_for_timeout(6000)
                 if "select-country" in sayfa.url:
                     sonuclar.append(kayit(u, simdi, None, "ulke_kapisi", varyant=model))
                     print(f"[trendyol] {model[:40]}: ulke_kapisi")
                 else:
-                    dokum = trendyol_satici_dokumu(sayfa)
-                    if dokum:
-                        analar = [(a, f) for a, f in dokum
+                    liste, kaynak = None, "-"
+                    for veri in yakalananlar:  # 1) API
+                        liste = satici_listesi_cikar(veri)
+                        if liste:
+                            kaynak = "api"
+                            break
+                    if not liste:              # 2) envoy deposu
+                        liste = envoy_depo_listesi(sayfa)
+                        if liste:
+                            kaynak = "envoy"
+
+                    analar, digerler = [], []
+                    if liste:
+                        analar = [(a, f) for a, f in liste
                                   if normalize_satici(a) in ANA_SATICILAR]
-                        digerler = [f for a, f in dokum
+                        digerler = [f for a, f in liste
                                     if normalize_satici(a) not in ANA_SATICILAR]
-                        if analar:
-                            ad, f = analar[0]
-                            sonuclar.append(kayit(u, simdi, f, "ok",
-                                                  varyant=model, satici=ad))
-                        if digerler:
-                            sonuclar.append(kayit(u, simdi, min(digerler), "ok",
-                                                  varyant=model, satici="diger satici"))
-                        if not analar and not digerler:
-                            sonuclar.append(kayit(u, simdi, None, "fiyat_bulunamadi",
-                                                  varyant=model))
-                        print(f"[trendyol] {model[:40]}: "
-                              f"ana={analar[0] if analar else '-'} "
-                              f"diger_min={min(digerler) if digerler else '-'} "
-                              f"[gomulu, {len(dokum)} satici]")
-                    else:
-                        f = trendyol_dom_fiyat(sayfa)
-                        durum = "ok" if f is not None else "fiyat_bulunamadi"
-                        sonuclar.append(kayit(u, simdi, f, durum, varyant=model))
-                        print(f"[trendyol] {model[:40]}: {f} [{durum}, dom]")
+
+                    if analar:
+                        ad, f = analar[0]
+                        sonuclar.append(kayit(u, simdi, f, "ok",
+                                              varyant=model, satici=ad))
+                    else:                      # 3) buy-box yedegi: DOM
+                        f_dom = trendyol_dom_fiyat(sayfa)
+                        if f_dom is not None:
+                            sonuclar.append(kayit(u, simdi, f_dom, "ok",
+                                                  varyant=model, satici=""))
+                            kaynak += "+dom"
+                    if digerler:
+                        sonuclar.append(kayit(u, simdi, min(digerler), "ok",
+                                              varyant=model, satici="diger satici"))
+                    if not analar and not digerler and "dom" not in kaynak:
+                        sonuclar.append(kayit(u, simdi, None, "fiyat_bulunamadi",
+                                              varyant=model))
+                    print(f"[trendyol] {model[:40]}: "
+                          f"ana={analar[0] if analar else '-'} "
+                          f"diger_min={min(digerler) if digerler else '-'} "
+                          f"[{kaynak}]")
             except Exception:
                 sonuclar.append(kayit(u, simdi, None, "baglanti_hatasi", varyant=model))
                 print(f"[trendyol] {model[:40]}: baglanti_hatasi")
@@ -389,7 +422,6 @@ def site_iscisi(alan_adi, urunler, simdi):
 
 
 def satici_sutunu_garantile():
-    """Eski fiyatlar.csv'de satici sutunu yoksa bir kez ekler (gecis islemi)."""
     try:
         with open("fiyatlar.csv", newline="", encoding="utf-8") as f:
             satirlar = list(csv.reader(f))
