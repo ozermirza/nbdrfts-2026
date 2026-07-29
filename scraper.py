@@ -246,7 +246,7 @@ def trendyol_iscisi(urunler, simdi):
 def shopify_dokum_al(alan_adi):
     dokum = {}
     try:
-        for sayfa_no in range(1, 5):
+        for sayfa_no in range(1, 9):
             url = f"https://{alan_adi}/products.json?limit=250&page={sayfa_no}"
             c = requests.get(url, headers=BASLIKLAR, timeout=20)
             if c.status_code != 200:
