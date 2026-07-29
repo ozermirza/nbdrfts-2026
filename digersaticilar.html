@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fiyat Radarı · Diğer Satıcılar</title>
+<style>
+  :root {
+    --zemin: #14161a; --yuzey: #1d2026; --yuzey2: #23262d;
+    --metin: #e8eaed; --soluk: #9aa0a8; --cizgi: #2d3138;
+    --vurgu: #4f8cff; --golge: 0 1px 4px rgba(0,0,0,.4);
+  }
+  body.acik {
+    --zemin: #f4f5f7; --yuzey: #ffffff; --yuzey2: #f7f8fa;
+    --metin: #1c1e21; --soluk: #66707a; --cizgi: #e7e9ee;
+    --vurgu: #2f6bdf; --golge: 0 1px 3px rgba(0,0,0,.08);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+         background: var(--zemin); color: var(--metin); padding: 20px; }
+  .ust { display: flex; justify-content: space-between; align-items: center; }
+  h1 { font-size: 21px; font-weight: 650; }
+  .alt { color: var(--soluk); font-size: 13px; margin: 4px 0 18px; }
+  .btn { border: 1px solid var(--cizgi); background: var(--yuzey);
+         color: var(--metin); border-radius: 8px; padding: 7px 12px;
+         font-size: 13px; cursor: pointer; text-decoration: none; }
+  .btn:hover { border-color: var(--vurgu); color: var(--vurgu); }
+  input[type=text] { padding: 8px 10px; border: 1px solid var(--cizgi);
+                     border-radius: 8px; font-size: 14px; margin-bottom: 12px;
+                     background: var(--yuzey2); color: var(--metin); width: 280px; }
+  table { width: 100%; border-collapse: collapse; background: var(--yuzey);
+          border: 1px solid var(--cizgi); border-radius: 12px; overflow: hidden;
+          box-shadow: var(--golge); }
+  th { text-align: left; font-size: 12px; color: var(--soluk); padding: 11px 12px;
+       border-bottom: 1px solid var(--cizgi); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--cizgi); font-size: 14px; }
+  tr:last-child td { border-bottom: none; }
+  .fiyat { font-weight: 600; }
+  .fiyat a { color: inherit; }
+  .rozet { display: inline-block; padding: 2px 8px; border-radius: 6px;
+           font-size: 12px; font-weight: 600; }
+  .ucuz { background: rgba(230,80,60,.15); color: #e07a5f; }   /* rakip daha ucuz */
+  .pahali { background: rgba(35,165,90,.16); color: #3fbf74; } /* rakip daha pahali */
+  .adet { color: var(--soluk); font-size: 12px; }
+  @media (max-width: 800px) {
+    body { padding: 12px; }
+    table { min-width: 700px; }
+    .tabloKap { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+  <div class="ust">
+    <h1>Diğer Satıcılar</h1>
+    <a class="btn" href="index.html">← Ana tablo</a>
+  </div>
+  <div class="alt" id="bilgi">Her ürün için, ana satıcı dışındaki en ucuz satıcının fiyatı.</div>
+  <input type="text" id="ara" placeholder="model ara...">
+  <div class="tabloKap">
+    <table>
+      <thead><tr>
+        <th>Marka</th><th>Seri</th><th>Hacim</th><th>Model</th>
+        <th>Diğer satıcı (en ucuz)</th><th>Ana satıcı</th><th>Fark</th>
+      </tr></thead>
+      <tbody id="govde"></tbody>
+    </table>
+  </div>
+<script>
+function csvOku(metin) {
+  const satirlar = metin.trim().split("\n");
+  const basliklar = satirlar[0].split(",").map(b => b.trim());
+  return satirlar.slice(1).map(s => {
+    const d = s.split(","), k = {};
+    basliklar.forEach((b, i) => k[b] = (d[i] || "").trim());
+    return k;
+  });
+}
+const tl = x => parseFloat(x).toLocaleString("tr-TR") + " TL";
+const anahtar = k => [k.marka, k.seri_adi.toLowerCase(), k.varyant, k.hacim].join("|");
+let satirlar = [];
+
+async function baslat() {
+  try { if (localStorage.getItem("tema") === "acik") document.body.classList.add("acik"); } catch {}
+  const kayitlar = csvOku(await (await fetch("fiyatlar.csv?" + Date.now())).text());
+  const sonTur = [...new Set(kayitlar.map(k => k.tarih))].sort().at(-1);
+  const son = kayitlar.filter(k => k.tarih === sonTur);
+  document.getElementById("bilgi").textContent =
+    "Son güncelleme: " + sonTur + " · her ürün için ana satıcı dışındaki en ucuz satıcı";
+
+  // Ana satici fiyatlari: karsilastirma icin harita
+  const analar = new Map();
+  son.filter(k => k.fiyat && k.satici !== "diger satici")
+     .forEach(k => analar.set(anahtar(k), parseFloat(k.fiyat)));
+
+  satirlar = son.filter(k => k.satici === "diger satici" && k.fiyat)
+    .map(k => ({ ...k, anaFiyat: analar.get(anahtar(k)) ?? null }));
+
+  document.getElementById("ara").addEventListener("input", ciz);
+  ciz();
+}
+
+function ciz() {
+  const a = document.getElementById("ara").value.toLowerCase();
+  document.getElementById("govde").innerHTML = satirlar
+    .filter(k => !a || (k.marka + " " + k.seri_adi + " " + k.varyant).toLowerCase().includes(a))
+    .map(k => {
+      let fark = `<span class="adet">ana satıcı verisi yok</span>`;
+      if (k.anaFiyat != null) {
+        const d = parseFloat(k.fiyat) - k.anaFiyat;
+        fark = d < 0
+          ? `<span class="rozet ucuz">rakip ${tl(-d)} daha ucuz</span>`
+          : (d > 0 ? `<span class="rozet pahali">rakip ${tl(d)} daha pahalı</span>`
+                   : `<span class="adet">aynı fiyat</span>`);
+      }
+      return `<tr>
+        <td>${k.marka}</td><td>${k.seri_adi}</td><td>${k.hacim}</td>
+        <td><a href="${k.url}" target="_blank" style="color:inherit">${k.varyant}</a></td>
+        <td class="fiyat"><a href="${k.url}" target="_blank">${tl(k.fiyat)}</a></td>
+        <td class="fiyat">${k.anaFiyat != null ? tl(k.anaFiyat) : "—"}</td>
+        <td>${fark}</td></tr>`;
+    }).join("");
+}
+baslat().catch(h => document.getElementById("bilgi").textContent = "Veri yüklenemedi: " + h.message);
+</script>
+</body>
+</html>
