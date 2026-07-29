@@ -206,7 +206,7 @@ async function baslat() {
   });
 
   document.getElementById("sonGuncelleme").textContent =
-    "Son güncelleme: " + sonTur + " · robot 2 saatte bir tarar";
+    "Son güncelleme: " + sonTur + " · robot saat başı tarar (00-06 hariç)";
   document.getElementById("kGrup").textContent = gruplar.length;
   document.getElementById("kKayit").textContent = son.length;
   document.getElementById("kDusen").textContent = son.filter(k => k.yon === "dusus").length;
