@@ -121,7 +121,7 @@
 <script>
 function csvOku(metin) {
   const satirlar = metin.trim().split("\n");
-  const basliklar = satirlar[0].split(",");
+  const basliklar = satirlar[0].split(",").map(b => b.trim());
   return satirlar.slice(1).map(s => {
     const d = s.split(","), k = {};
     basliklar.forEach((b, i) => k[b] = (d[i] || "").trim());
@@ -290,7 +290,7 @@ function ciz() {
       if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
       if (!rozet && d.fiyat) rozet = `<span class="adet">grup fiyatından farklı</span>`;
       satirlar += `<tr class="detay">
-        <td>↳ model</td><td colspan="3">${etiket(d)}</td>
+        <td>↳ model</td><td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a></td>
         <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
         <td>${rozet}</td></tr>`;
     });
