@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 6)
-# Yeni: Shopify urun adlari varyant sutununa yazilir; sipnjoylife ve Shopify
-# varyantlarina dogrudan varyant sayfasi linki uretilir.
+# FIYAT RADARI - scraper.py (surum 7)
+# Yeni: satici sutunu; Trendyol'da ana satici + "diger satici" (en dusuk) ayri
+# kayitlar; ustu cizili eski fiyat hatasi duzeltildi (kucuk fiyat esas alinir).
 
 import csv
 import difflib
@@ -22,7 +22,16 @@ BASLIKLAR = {
 }
 TURKIYE_SAATI = timezone(timedelta(hours=3))
 SUTUNLAR = ["tarih", "marka", "seri_adi", "varyant", "kategori1", "hacim",
-            "kategori2", "platform", "fiyat", "durum", "url"]
+            "kategori2", "platform", "fiyat", "durum", "url", "satici"]
+
+# Markalarin resmi/ana saticilari (kucuk harf, bosluksuz yazilir).
+# Yeni marka ekledikce buraya ana saticisini ekle; listede olmayan herkes
+# "diger satici" olarak kaydedilir.
+ANA_SATICILAR = {"popcorner", "sipnjoy"}
+
+
+def normalize_satici(ad):
+    return (ad or "").lower().replace(" ", "")
 
 
 def slugla(metin):
@@ -70,14 +79,14 @@ def fiyat_bul(html):
     return None
 
 
-def kayit(urun, simdi, fiyat, durum, varyant=None, url=None):
+def kayit(urun, simdi, fiyat, durum, varyant=None, url=None, satici=""):
     return {
         "tarih": simdi, "marka": urun["marka"], "seri_adi": urun["seri_adi"],
         "varyant": varyant if varyant is not None else varyant_bul(urun["url"]),
         "kategori1": urun["kategori1"], "hacim": urun["hacim"],
         "kategori2": urun["kategori2"], "platform": urun["platform"],
         "fiyat": fiyat if fiyat is not None else "", "durum": durum,
-        "url": url or urun["url"].strip(),
+        "url": url or urun["url"].strip(), "satici": satici,
     }
 
 
@@ -157,7 +166,6 @@ def nextdata_iscisi(urunler, simdi):
             if puan > 0.5:
                 eslesme = anahtar
         if eslesme:
-            # Varyant linki: orijinal linkteki parametre adini (Desen/Renk) koru
             adres = urlparse(u["url"].strip())
             parametre = "Renk" if "Renk" in parse_qs(adres.query) else "Desen"
             taban = f"https://{adres.netloc}{yol}"
@@ -166,13 +174,13 @@ def nextdata_iscisi(urunler, simdi):
                 if varyant_adi:
                     vurl += f"?{parametre}={varyant_adi.replace(' ', '-')}"
                 sonuclar.append(kayit(u, simdi, fiyat, "ok",
-                                      varyant=varyant_adi, url=vurl))
+                                      varyant=varyant_adi, url=vurl, satici="sipnjoy"))
             print(f"[nextdata] {u['seri_adi']}: {len(katalog[eslesme])} varyant")
         else:
             f, durum = tek_tek_cek(u)
             if durum == "ok":
                 durum = "model_fiyati"
-            sonuclar.append(kayit(u, simdi, f, durum, varyant=""))
+            sonuclar.append(kayit(u, simdi, f, durum, varyant="", satici="sipnjoy"))
             print(f"[nextdata] {u['seri_adi']}: eslesme yok, {durum}")
             time.sleep(random.uniform(2, 4))
     return sonuclar
@@ -180,30 +188,70 @@ def nextdata_iscisi(urunler, simdi):
 
 # ---------------- TRENDYOL ----------------
 
-def trendyol_fiyat_sok(sayfa):
+def _fiyat_alanindan(d):
+    """Bir sozlukten guncel fiyati ceker: once discountedPrice, sonra sellingPrice."""
+    kaynaklar = [d.get("price")] if isinstance(d.get("price"), dict) else []
+    kaynaklar.append(d)
+    for p in kaynaklar:
+        if not isinstance(p, dict):
+            continue
+        for alan in ("discountedPrice", "sellingPrice"):
+            v = p.get(alan)
+            if isinstance(v, dict) and isinstance(v.get("value"), (int, float)):
+                return float(v["value"])
+            if isinstance(v, (int, float)):
+                return float(v)
+    return None
+
+
+def trendyol_satici_dokumu(sayfa):
+    """Sayfanin gomulu verisinden [(satici_adi, guncel_fiyat), ...] cikarir.
+    Ilk eleman one cikan (buy-box) saticidir."""
     try:
         ham = sayfa.evaluate(
             "() => JSON.stringify(window.__PRODUCT_DETAIL_APP_INITIAL_STATE__ || null)")
-        if ham and ham != "null":
-            for d in gez(json.loads(ham)):
-                for alan in ("discountedPrice", "sellingPrice"):
-                    v = d.get(alan)
-                    if isinstance(v, dict) and isinstance(v.get("value"), (int, float)):
-                        return float(v["value"]), f"gomulu_{alan}"
+        if not ham or ham == "null":
+            return None
+        veri = json.loads(ham)
     except Exception:
-        pass
-    for secici in ("span.prc-dsc", "[data-testid*='price']", "[class*='price-view']"):
+        return None
+    kazanan = None
+    for d in gez(veri):
+        if isinstance(d.get("otherMerchants"), list) and "merchant" in d:
+            kazanan = d
+            break
+    if kazanan is None:
+        return None
+    liste = []
+    ad = (kazanan.get("merchant") or {}).get("name") or ""
+    f = _fiyat_alanindan(kazanan)
+    if f is not None:
+        liste.append((ad, f))
+    for o in kazanan["otherMerchants"]:
+        if not isinstance(o, dict):
+            continue
+        oad = (o.get("merchant") or {}).get("name") or ""
+        of = _fiyat_alanindan(o)
+        if of is not None:
+            liste.append((oad, of))
+    return liste or None
+
+
+def trendyol_dom_fiyat(sayfa):
+    """Yedek: fiyat kutusundaki TL degerlerinin en kucugu (ustu cizili eskiyi eler)."""
+    for secici in ("div[class*='price']", "span.prc-dsc", "[data-testid*='price']"):
         try:
             el = sayfa.locator(secici).first
-            if el.count() > 0:
-                m = re.search(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL",
-                              el.inner_text(timeout=2000))
-                if m:
-                    return float(m.group(1).replace(".", "").replace(",", ".")), "dom"
+            if el.count() == 0:
+                continue
+            metin = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", el.inner_text(timeout=2000))
+            adaylar = [float(m.replace(".", "").replace(",", "."))
+                       for m in re.findall(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", metin)]
+            if adaylar:
+                return min(adaylar)
         except Exception:
             continue
-    f = fiyat_bul(sayfa.content())
-    return (f, "genel_kalip") if f is not None else (None, None)
+    return None
 
 
 def trendyol_iscisi(urunler, simdi):
@@ -218,24 +266,45 @@ def trendyol_iscisi(urunler, simdi):
             {"name": "storefrontId", "value": "1", "domain": ".trendyol.com", "path": "/"},
         ])
         for u in urunler:
-            fiyat, durum, kaynak = None, "ok", None
             sayfa = baglam.new_page()
+            yol = urlparse(u["url"].strip()).path.split("/")[-1]
+            model = re.sub(r"-p-\d+$", "", yol).replace("-", " ")
             try:
                 sayfa.goto(u["url"].strip(), timeout=60000, wait_until="domcontentloaded")
                 sayfa.wait_for_timeout(5000)
                 if "select-country" in sayfa.url:
-                    durum = "ulke_kapisi"
+                    sonuclar.append(kayit(u, simdi, None, "ulke_kapisi", varyant=model))
+                    print(f"[trendyol] {model[:40]}: ulke_kapisi")
                 else:
-                    fiyat, kaynak = trendyol_fiyat_sok(sayfa)
-                    durum = "ok" if fiyat is not None else "fiyat_bulunamadi"
+                    dokum = trendyol_satici_dokumu(sayfa)
+                    if dokum:
+                        analar = [(a, f) for a, f in dokum
+                                  if normalize_satici(a) in ANA_SATICILAR]
+                        digerler = [f for a, f in dokum
+                                    if normalize_satici(a) not in ANA_SATICILAR]
+                        if analar:
+                            ad, f = analar[0]
+                            sonuclar.append(kayit(u, simdi, f, "ok",
+                                                  varyant=model, satici=ad))
+                        if digerler:
+                            sonuclar.append(kayit(u, simdi, min(digerler), "ok",
+                                                  varyant=model, satici="diger satici"))
+                        if not analar and not digerler:
+                            sonuclar.append(kayit(u, simdi, None, "fiyat_bulunamadi",
+                                                  varyant=model))
+                        print(f"[trendyol] {model[:40]}: "
+                              f"ana={analar[0] if analar else '-'} "
+                              f"diger_min={min(digerler) if digerler else '-'} "
+                              f"[gomulu, {len(dokum)} satici]")
+                    else:
+                        f = trendyol_dom_fiyat(sayfa)
+                        durum = "ok" if f is not None else "fiyat_bulunamadi"
+                        sonuclar.append(kayit(u, simdi, f, durum, varyant=model))
+                        print(f"[trendyol] {model[:40]}: {f} [{durum}, dom]")
             except Exception:
-                durum = "baglanti_hatasi"
+                sonuclar.append(kayit(u, simdi, None, "baglanti_hatasi", varyant=model))
+                print(f"[trendyol] {model[:40]}: baglanti_hatasi")
             sayfa.close()
-            # Trendyol'da model adi linkin icinde: varyant olarak yaz
-            yol = urlparse(u["url"].strip()).path.split("/")[-1]
-            model = re.sub(r"-p-\d+$", "", yol).replace("-", " ")
-            sonuclar.append(kayit(u, simdi, fiyat, durum, varyant=model))
-            print(f"[trendyol] {model[:40]}: {fiyat} [{durum}, kaynak={kaynak}]")
             time.sleep(random.uniform(2, 4))
         tarayici.close()
     return sonuclar
@@ -259,7 +328,6 @@ def shopify_dokum_al(alan_adi):
                     if not v.get("price"):
                         continue
                     vt = (v.get("title") or "").strip()
-                    # "Default Title" ise urunun kendi adini kullan
                     etiket = u.get("title", "") if vt.lower() in ("", "default title") else vt
                     vurl = f"https://{alan_adi}/products/{u['handle']}"
                     if vt and vt.lower() != "default title" and v.get("id"):
@@ -278,6 +346,7 @@ def site_iscisi(alan_adi, urunler, simdi):
     if "sipnjoylife" in alan_adi:
         return nextdata_iscisi(urunler, simdi)
 
+    satici = "popcorner" if "popcorner" in alan_adi else ""
     sonuclar = []
     dokum = shopify_dokum_al(alan_adi) if any("/products/" in u["url"] for u in urunler) else None
     if dokum:
@@ -290,16 +359,34 @@ def site_iscisi(alan_adi, urunler, simdi):
             if handle in dokum:
                 for etiket, fiyat, vurl in dokum[handle]:
                     sonuclar.append(kayit(u, simdi, fiyat, "ok",
-                                          varyant=etiket, url=vurl))
+                                          varyant=etiket, url=vurl, satici=satici))
                 continue
         f, durum = tek_tek_cek(u)
-        sonuclar.append(kayit(u, simdi, f, durum))
+        sonuclar.append(kayit(u, simdi, f, durum, satici=satici))
         print(f"[{alan_adi}] {u['seri_adi']}: {f} [{durum}]")
         time.sleep(random.uniform(3, 6))
     return sonuclar
 
 
+def satici_sutunu_garantile():
+    """Eski fiyatlar.csv'de satici sutunu yoksa bir kez ekler (gecis islemi)."""
+    try:
+        with open("fiyatlar.csv", newline="", encoding="utf-8") as f:
+            satirlar = list(csv.reader(f))
+    except FileNotFoundError:
+        return
+    if not satirlar or "satici" in satirlar[0]:
+        return
+    satirlar[0].append("satici")
+    for s in satirlar[1:]:
+        s.append("")
+    with open("fiyatlar.csv", "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(satirlar)
+    print("fiyatlar.csv'ye satici sutunu eklendi (gecis islemi).")
+
+
 def main():
+    satici_sutunu_garantile()
     with open("urunler.csv", newline="", encoding="utf-8") as f:
         urunler = [u for u in csv.DictReader(f) if (u.get("url") or "").strip()]
 
