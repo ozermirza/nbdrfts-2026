@@ -103,7 +103,10 @@
 <body>
   <div class="ust">
     <h1>Fiyat Radarı</h1>
-    <button class="btn" id="temaBtn">☀ Açık tema</button>
+    <div>
+      <a class="btn" href="digersaticilar.html" style="text-decoration:none; margin-right:8px">Diğer satıcılar</a>
+      <button class="btn" id="temaBtn">☀ Açık tema</button>
+    </div>
   </div>
   <div class="alt" id="sonGuncelleme">Veri yükleniyor...</div>
 
@@ -277,13 +280,11 @@ function detaySatiri(d, g) {
   let rozet = "";
   if (d.yon === "dusus") rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
   if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
-  if (!rozet && d.fiyat && g.fiyat && d.fiyat !== g.fiyat && !digerMi(d)) {
+  if (!rozet && d.fiyat && g.fiyat && d.fiyat !== g.fiyat) {
     const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
     rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
   }
-  const saticiHtml = digerMi(d)
-    ? `<span class="saticiEtiket">diğer satıcı</span>`
-    : (d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "");
+  const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
   return `<tr class="detay">
     <td>↳ model</td>
     <td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a>${saticiHtml}</td>
@@ -320,9 +321,10 @@ function ciz() {
     const acik = acikGruplar.has(g.anahtar);
     const fiyatH = g.fiyat
       ? `<a href="${g.url}" target="_blank">${tl(g.fiyat)}</a>`
-      : `<span class="hata">${g.durum}</span>`;
-    const detaylar = acik ? g.anaUyeler.concat(g.digerUyeler)
-                          : g.istisnalar.concat(g.digerUyeler);
+      : (g.digerUyeler.length
+          ? `<a href="digersaticilar.html" class="adet">sadece diğer satıcıda</a>`
+          : `<span class="hata">${g.durum}</span>`);
+    const detaylar = acik ? g.anaUyeler : g.istisnalar;
     const detayNotu = acik
       ? `<span class="adet">▾ tümü açık</span>`
       : (detaylar.length ? `<span class="adet">${detaylar.length} detay ↓</span>` : "");
