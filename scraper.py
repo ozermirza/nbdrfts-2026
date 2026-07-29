@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 7)
-# Yeni: satici sutunu; Trendyol'da ana satici + "diger satici" (en dusuk) ayri
-# kayitlar; ustu cizili eski fiyat hatasi duzeltildi (kucuk fiyat esas alinir).
+# FIYAT RADARI - scraper.py (surum 8)
+# Yeni: Trendyol'un yeni altyapisi icin depo-avcisi sokucu — tum PROPS/STATE
+# depolarini tarar, satici+fiyat tasiyan dugumu bulur. (surum 7: satici sutunu,
+# ana satici / "diger satici" ayrimi, ustu cizili fiyat duzeltmesi)
 
 import csv
 import difflib
@@ -205,36 +206,55 @@ def _fiyat_alanindan(d):
 
 
 def trendyol_satici_dokumu(sayfa):
-    """Sayfanin gomulu verisinden [(satici_adi, guncel_fiyat), ...] cikarir.
-    Ilk eleman one cikan (buy-box) saticidir."""
+    """Yeni Trendyol altyapisi: tum PROPS/STATE depolarini topla, icinde
+    satici+fiyat bilgisi tasiyan dugumu bul. [(satici, fiyat), ...] doner,
+    ilk eleman one cikan saticidir. Ayrica hangi depodan geldigini yazdirir."""
     try:
-        ham = sayfa.evaluate(
-            "() => JSON.stringify(window.__PRODUCT_DETAIL_APP_INITIAL_STATE__ || null)")
-        if not ham or ham == "null":
+        ham = sayfa.evaluate("""() => {
+            const out = {};
+            for (const k of Object.getOwnPropertyNames(window)) {
+                if (k.endsWith('PROPS') || k.includes('STATE') || k.includes('INITIAL')) {
+                    try { JSON.stringify(window[k]); out[k] = window[k]; } catch (e) {}
+                }
+            }
+            return JSON.stringify(out);
+        }""")
+        if not ham or ham == "{}":
             return None
-        veri = json.loads(ham)
+        depolar = json.loads(ham)
     except Exception:
         return None
-    kazanan = None
-    for d in gez(veri):
-        if isinstance(d.get("otherMerchants"), list) and "merchant" in d:
-            kazanan = d
-            break
-    if kazanan is None:
-        return None
-    liste = []
-    ad = (kazanan.get("merchant") or {}).get("name") or ""
-    f = _fiyat_alanindan(kazanan)
-    if f is not None:
-        liste.append((ad, f))
-    for o in kazanan["otherMerchants"]:
-        if not isinstance(o, dict):
+
+    for depo_adi, depo in depolar.items():
+        kazanan = None
+        for d in gez(depo):
+            if isinstance(d.get("otherMerchants"), list) and "merchant" in d:
+                kazanan = d
+                break
+        if kazanan is None:  # tek saticili urun: merchant + fiyat tasiyan dugum
+            for d in gez(depo):
+                if isinstance(d.get("merchant"), dict) and _fiyat_alanindan(d) is not None:
+                    kazanan = d
+                    kazanan.setdefault("otherMerchants", [])
+                    break
+        if kazanan is None:
             continue
-        oad = (o.get("merchant") or {}).get("name") or ""
-        of = _fiyat_alanindan(o)
-        if of is not None:
-            liste.append((oad, of))
-    return liste or None
+        liste = []
+        ad = (kazanan.get("merchant") or {}).get("name") or ""
+        f = _fiyat_alanindan(kazanan)
+        if f is not None:
+            liste.append((ad, f))
+        for o in kazanan.get("otherMerchants", []):
+            if not isinstance(o, dict):
+                continue
+            oad = (o.get("merchant") or {}).get("name") or ""
+            of = _fiyat_alanindan(o)
+            if of is not None:
+                liste.append((oad, of))
+        if liste:
+            print(f"    (veri deposu: {depo_adi})")
+            return liste
+    return None
 
 
 def trendyol_dom_fiyat(sayfa):
