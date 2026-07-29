@@ -122,7 +122,7 @@
     <div class="panel">
       <h3>Ara</h3>
       <input type="text" id="fAra" placeholder="seri, model, varyant...">
-      <label><input type="checkbox" id="fDegisen"> Sadece değişenler</label>
+      <label><input type="checkbox" id="fDegisen"> Sadece değişen/istisnalı</label>
       <div id="filtreAlan"></div>
     </div>
     <div class="tabloKap">
@@ -151,6 +151,7 @@ function csvOku(metin) {
   });
 }
 const tl = x => parseFloat(x).toLocaleString("tr-TR") + " TL";
+const kisaTarih = t => t ? t.slice(8, 10) + "." + t.slice(5, 7) + " " + t.slice(11) : "";
 const kimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.varyant, k.hacim,
                      k.platform, k.satici || ""].join("|");
 const grupKimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.hacim, k.platform].join("|");
@@ -174,13 +175,32 @@ const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür":
 let gruplar = [], siralama = { k: null, yon: 1 };
 let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
 let acikGruplar = new Set();
+let gecmis = new Map();   // kimlik -> [{tarih, fiyat}] (tum turlar, sirali)
 
 const aktif = (b, d) => durumlar[b][d] !== false;
+
+// Mevcut fiyatin hangi turda basladigini bulur (degisim ani)
+function degisimAni(k) {
+  const h = gecmis.get(kimlik(k));
+  if (!h || !k.fiyat) return null;
+  let i = h.length - 1;
+  while (i >= 0 && h[i].fiyat === k.fiyat) i--;
+  if (i < 0 || i === h.length - 1) return null;  // hep ayni fiyat ya da tutarsiz
+  return h[i + 1].tarih;
+}
 
 async function baslat() {
   const kayitlar = csvOku(await (await fetch("fiyatlar.csv?" + Date.now())).text());
   const turlar = [...new Set(kayitlar.map(k => k.tarih))].sort();
   const sonTur = turlar.at(-1), oncekiTur = turlar.at(-2) || null;
+
+  // Gecmis haritasi: her kayit kimligi icin tarih sirali fiyat listesi
+  kayitlar.filter(k => k.fiyat).sort((a, b) => a.tarih.localeCompare(b.tarih))
+    .forEach(k => {
+      const anahtar = kimlik(k);
+      if (!gecmis.has(anahtar)) gecmis.set(anahtar, []);
+      gecmis.get(anahtar).push({ tarih: k.tarih, fiyat: k.fiyat });
+    });
 
   const son = kayitlar.filter(k => k.tarih === sonTur);
   const onceki = new Map(kayitlar.filter(k => k.tarih === oncekiTur)
@@ -278,11 +298,13 @@ function panelCiz() {
 
 function detaySatiri(d, g) {
   let rozet = "";
-  if (d.yon === "dusus") rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
-  if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
+  const an = kisaTarih(degisimAni(d));
+  const anEk = an ? ` <span class="adet">· ${an}</span>` : "";
+  if (d.yon === "dusus") rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
+  if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
   if (!rozet && d.fiyat && g.fiyat && d.fiyat !== g.fiyat) {
     const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
-    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
+    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
   }
   const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
   return `<tr class="detay">
@@ -299,7 +321,7 @@ function ciz() {
 
   let liste = gruplar.filter(g =>
     Object.values(BOYUTLAR).every(b => aktif(b, g[b])) &&
-    (!sadeceDegisen || g.degisenSayi > 0) &&
+    (!sadeceDegisen || g.degisenSayi > 0 || g.istisnalar.length > 0) &&
     (!ara || (g.marka + " " + g.seri_adi + " " +
               g.anaUyeler.concat(g.digerUyeler).map(etiket).join(" "))
               .toLowerCase().includes(ara))
