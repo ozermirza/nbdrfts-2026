@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fiyat Radarı</title>
 <style>
-  :root {  /* koyu tema (varsayilan) */
+  :root {
     --zemin: #14161a; --yuzey: #1d2026; --yuzey2: #23262d;
     --metin: #e8eaed; --soluk: #9aa0a8; --cizgi: #2d3138;
     --vurgu: #4f8cff; --golge: 0 1px 4px rgba(0,0,0,.4);
@@ -30,6 +30,9 @@
              color: var(--soluk); border-radius: 6px; padding: 2px 8px;
              font-size: 11px; cursor: pointer; text-transform: none; }
   .btnMini:hover { border-color: var(--vurgu); color: var(--vurgu); }
+  .acButon { border: none; background: none; color: var(--soluk); cursor: pointer;
+             font-size: 12px; padding: 0 6px 0 0; }
+  .acButon:hover { color: var(--vurgu); }
 
   .kartlar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
   .kart { background: var(--yuzey); border: 1px solid var(--cizgi);
@@ -79,17 +82,20 @@
   .fiyat { font-weight: 600; }
   .fiyat a { color: inherit; }
   .adet { color: var(--soluk); font-size: 12px; font-weight: 400; }
-  /* ---- Telefon duzeni (800px altinda devreye girer) ---- */
+  .saticiEtiket { display: inline-block; border: 1px solid var(--cizgi);
+                  color: var(--soluk); border-radius: 5px; padding: 0 6px;
+                  font-size: 11px; margin-left: 6px; }
+
   @media (max-width: 800px) {
     body { padding: 12px; }
-    .duzen { flex-direction: column; }          /* panel tablonun ustune */
+    .duzen { flex-direction: column; }
     .panel { width: 100%; position: static; }
-    .panel label { display: inline-block; width: 48%; }  /* kutucuklar 2 sutun */
+    .panel label { display: inline-block; width: 48%; }
     .kart { min-width: 100px; padding: 10px 12px; flex: 1; }
     .kart .sayi { font-size: 20px; }
     .tabloKap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { min-width: 720px; }                 /* tablo sikismaz, yana kayar */
-    th .tutamac { display: none; }              /* dokunmatikte surukleme yok */
+    table { min-width: 720px; }
+    th .tutamac { display: none; }
     td, th { padding: 8px 10px; font-size: 13px; }
   }
 </style>
@@ -142,8 +148,10 @@ function csvOku(metin) {
   });
 }
 const tl = x => parseFloat(x).toLocaleString("tr-TR") + " TL";
-const kimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.varyant, k.hacim, k.platform].join("|");
+const kimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.varyant, k.hacim,
+                     k.platform, k.satici || ""].join("|");
 const grupKimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.hacim, k.platform].join("|");
+const digerMi = k => (k.satici || "") === "diger satici";
 
 function linktenModel(url) {
   try {
@@ -162,6 +170,7 @@ function etiket(k) {
 const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür": "tur" };
 let gruplar = [], siralama = { k: null, yon: 1 };
 let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
+let acikGruplar = new Set();
 
 const aktif = (b, d) => durumlar[b][d] !== false;
 
@@ -188,19 +197,22 @@ async function baslat() {
     if (!sozluk.has(grupKimlik(k))) sozluk.set(grupKimlik(k), []);
     sozluk.get(grupKimlik(k)).push(k);
   });
-  gruplar = [...sozluk.values()].map(uyeler => {
+  gruplar = [...sozluk.entries()].map(([anahtar, uyeler]) => {
     const ilk = uyeler[0];
-    const fiyatli = uyeler.filter(u => u.fiyat);
+    const anaUyeler = uyeler.filter(u => !digerMi(u));
+    const digerUyeler = uyeler.filter(digerMi);
+    const fiyatli = anaUyeler.filter(u => u.fiyat);
     const sayac = {};
     fiyatli.forEach(u => sayac[u.fiyat] = (sayac[u.fiyat] || 0) + 1);
     const mod = Object.keys(sayac).sort((a, b) => sayac[b] - sayac[a])[0] || null;
-    const detaylar = uyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon);
+    const istisnalar = anaUyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon);
     return {
+      anahtar,
       marka: ilk.marka, seri_adi: ilk.seri_adi, hacim: ilk.hacim,
       platform: ilk.platform, tur: (ilk.kategori2 || "").toLowerCase(),
-      fiyat: mod, adet: uyeler.length,
+      fiyat: mod, adet: anaUyeler.length,
       durum: fiyatli.length ? "ok" : ilk.durum,
-      url: ilk.url, uyeler, detaylar,
+      url: ilk.url, anaUyeler, digerUyeler, istisnalar,
       degisenSayi: uyeler.filter(u => u.yon).length
     };
   });
@@ -261,6 +273,24 @@ function panelCiz() {
     }));
 }
 
+function detaySatiri(d, g) {
+  let rozet = "";
+  if (d.yon === "dusus") rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
+  if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
+  if (!rozet && d.fiyat && g.fiyat && d.fiyat !== g.fiyat && !digerMi(d)) {
+    const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
+    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
+  }
+  const saticiHtml = digerMi(d)
+    ? `<span class="saticiEtiket">diğer satıcı</span>`
+    : (d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "");
+  return `<tr class="detay">
+    <td>↳ model</td>
+    <td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a>${saticiHtml}</td>
+    <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
+    <td>${rozet}</td></tr>`;
+}
+
 function ciz() {
   panelCiz();
   const ara = document.getElementById("fAra").value.toLowerCase();
@@ -270,13 +300,14 @@ function ciz() {
     Object.values(BOYUTLAR).every(b => aktif(b, g[b])) &&
     (!sadeceDegisen || g.degisenSayi > 0) &&
     (!ara || (g.marka + " " + g.seri_adi + " " +
-              g.uyeler.map(etiket).join(" ")).toLowerCase().includes(ara))
+              g.anaUyeler.concat(g.digerUyeler).map(etiket).join(" "))
+              .toLowerCase().includes(ara))
   );
   if (siralama.k) {
     liste = [...liste].sort((a, b) => {
       if (siralama.k === "degisim")
-        return (b.degisenSayi + b.detaylar.length / 100
-              - a.degisenSayi - a.detaylar.length / 100) * siralama.yon;
+        return (b.degisenSayi + b.istisnalar.length / 100
+              - a.degisenSayi - a.istisnalar.length / 100) * siralama.yon;
       const x = a[siralama.k] || "", y = b[siralama.k] || "";
       const nx = parseFloat(x), ny = parseFloat(y);
       const s = (!isNaN(nx) && !isNaN(ny)) ? nx - ny
@@ -286,30 +317,32 @@ function ciz() {
   }
 
   document.getElementById("tabloGovde").innerHTML = liste.map(g => {
+    const acik = acikGruplar.has(g.anahtar);
     const fiyatH = g.fiyat
       ? `<a href="${g.url}" target="_blank">${tl(g.fiyat)}</a>`
       : `<span class="hata">${g.durum}</span>`;
+    const detaylar = acik ? g.anaUyeler.concat(g.digerUyeler)
+                          : g.istisnalar.concat(g.digerUyeler);
+    const detayNotu = acik
+      ? `<span class="adet">▾ tümü açık</span>`
+      : (detaylar.length ? `<span class="adet">${detaylar.length} detay ↓</span>` : "");
     let satirlar = `<tr>
-      <td>${g.marka}</td><td>${g.seri_adi}</td><td>${g.hacim}</td>
+      <td><button class="acButon" data-g="${g.anahtar}">${acik ? "▾" : "▸"}</button>${g.marka}</td>
+      <td>${g.seri_adi}</td><td>${g.hacim}</td>
       <td>${g.platform}</td>
       <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span></td>
-      <td>${g.detaylar.length ? `<span class="adet">${g.detaylar.length} istisna ↓</span>` : ""}</td>
+      <td>${detayNotu}</td>
     </tr>`;
-    g.detaylar.forEach(d => {
-      let rozet = "";
-      if (d.yon === "dusus") rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
-      if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
-      if (!rozet && d.fiyat && g.fiyat) {
-        const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
-        rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
-      }
-      satirlar += `<tr class="detay">
-        <td>↳ model</td><td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a></td>
-        <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
-        <td>${rozet}</td></tr>`;
-    });
+    detaylar.forEach(d => satirlar += detaySatiri(d, g));
     return satirlar;
   }).join("");
+
+  document.querySelectorAll(".acButon").forEach(b =>
+    b.addEventListener("click", () => {
+      const g = b.dataset.g;
+      acikGruplar.has(g) ? acikGruplar.delete(g) : acikGruplar.add(g);
+      ciz();
+    }));
 }
 
 function temaKur() {
