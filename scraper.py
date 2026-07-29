@@ -277,6 +277,23 @@ def trendyol_dom_fiyat(sayfa):
     return None
 
 
+def dom_satici_bul(sayfa):
+    """Buy-box saticisini sayfadaki 'Bu urun X tarafindan gonderilecektir'
+    cumlesinden okur."""
+    try:
+        html = sayfa.content()
+    except Exception:
+        return ""
+    yer = html.find("tarafından gönderilecektir")
+    if yer > 0:
+        parca = re.sub(r"<[^>]+>", " ", html[max(0, yer - 300):yer])
+        parca = re.sub(r"\s+", " ", parca).strip()
+        m = re.search(r"Bu ürün\s+(.+?)$", parca)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
 def trendyol_iscisi(urunler, simdi):
     from playwright.sync_api import sync_playwright
     sonuclar = []
@@ -292,68 +309,55 @@ def trendyol_iscisi(urunler, simdi):
             sayfa = baglam.new_page()
             yol = urlparse(u["url"].strip()).path.split("/")[-1]
             model = re.sub(r"-p-\d+$", "", yol).replace("-", " ")
-
-            # API dinleyici: sayfanin arka plan isteklerinden urun verisini yakala
-            yakalananlar = []
-            def yanit_topla(yanit):
-                try:
-                    if "json" not in (yanit.headers.get("content-type") or ""):
-                        return
-                    govde = yanit.text()
-                    if '"merchant"' in govde and (
-                        '"otherMerchants"' in govde or '"sellingPrice"' in govde
-                        or '"discountedPrice"' in govde
-                    ):
-                        yakalananlar.append(json.loads(govde))
-                except Exception:
-                    pass
-            sayfa.on("response", yanit_topla)
-
             try:
                 sayfa.goto(u["url"].strip(), timeout=60000, wait_until="domcontentloaded")
-                sayfa.wait_for_timeout(6000)
+                sayfa.wait_for_timeout(5000)
                 if "select-country" in sayfa.url:
                     sonuclar.append(kayit(u, simdi, None, "ulke_kapisi", varyant=model))
                     print(f"[trendyol] {model[:40]}: ulke_kapisi")
+                    sayfa.close()
+                    time.sleep(random.uniform(2, 4))
+                    continue
+
+                # 1) Buy-box: DOM fiyati + sayfadaki satici cumlesi
+                #    (bulamazsa bir kez daha bekleyip dener)
+                dom_fiyat = trendyol_dom_fiyat(sayfa)
+                dom_satici = dom_satici_bul(sayfa)
+                if dom_fiyat is None:
+                    sayfa.wait_for_timeout(5000)
+                    dom_fiyat = trendyol_dom_fiyat(sayfa)
+                    dom_satici = dom_satici or dom_satici_bul(sayfa)
+
+                # 2) Yan panel: envoy deposundan diger saticilar
+                envoy = envoy_depo_listesi(sayfa) or []
+
+                # 3) Kayitlari kur
+                digerler = [f for a, f in envoy
+                            if normalize_satici(a) not in ANA_SATICILAR]
+                ana = None
+                if dom_fiyat is not None:
+                    if dom_satici and normalize_satici(dom_satici) not in ANA_SATICILAR:
+                        digerler.append(dom_fiyat)  # buy-box baska saticida
+                    else:
+                        ana = (dom_satici, dom_fiyat)
                 else:
-                    liste, kaynak = None, "-"
-                    for veri in yakalananlar:  # 1) API
-                        liste = satici_listesi_cikar(veri)
-                        if liste:
-                            kaynak = "api"
-                            break
-                    if not liste:              # 2) envoy deposu
-                        liste = envoy_depo_listesi(sayfa)
-                        if liste:
-                            kaynak = "envoy"
+                    envoy_ana = [(a, f) for a, f in envoy
+                                 if normalize_satici(a) in ANA_SATICILAR]
+                    if envoy_ana:
+                        ana = envoy_ana[0]
 
-                    analar, digerler = [], []
-                    if liste:
-                        analar = [(a, f) for a, f in liste
-                                  if normalize_satici(a) in ANA_SATICILAR]
-                        digerler = [f for a, f in liste
-                                    if normalize_satici(a) not in ANA_SATICILAR]
-
-                    if analar:
-                        ad, f = analar[0]
-                        sonuclar.append(kayit(u, simdi, f, "ok",
-                                              varyant=model, satici=ad))
-                    else:                      # 3) buy-box yedegi: DOM
-                        f_dom = trendyol_dom_fiyat(sayfa)
-                        if f_dom is not None:
-                            sonuclar.append(kayit(u, simdi, f_dom, "ok",
-                                                  varyant=model, satici=""))
-                            kaynak += "+dom"
-                    if digerler:
-                        sonuclar.append(kayit(u, simdi, min(digerler), "ok",
-                                              varyant=model, satici="diger satici"))
-                    if not analar and not digerler and "dom" not in kaynak:
-                        sonuclar.append(kayit(u, simdi, None, "fiyat_bulunamadi",
-                                              varyant=model))
-                    print(f"[trendyol] {model[:40]}: "
-                          f"ana={analar[0] if analar else '-'} "
-                          f"diger_min={min(digerler) if digerler else '-'} "
-                          f"[{kaynak}]")
+                if ana is not None:
+                    sonuclar.append(kayit(u, simdi, ana[1], "ok",
+                                          varyant=model, satici=ana[0]))
+                if digerler:
+                    sonuclar.append(kayit(u, simdi, min(digerler), "ok",
+                                          varyant=model, satici="diger satici"))
+                if ana is None and not digerler:
+                    sonuclar.append(kayit(u, simdi, None, "fiyat_bulunamadi",
+                                          varyant=model))
+                print(f"[trendyol] {model[:40]}: ana={ana if ana else '-'} "
+                      f"diger_min={min(digerler) if digerler else '-'} "
+                      f"[satici_dom={dom_satici or '-'}]")
             except Exception:
                 sonuclar.append(kayit(u, simdi, None, "baglanti_hatasi", varyant=model))
                 print(f"[trendyol] {model[:40]}: baglanti_hatasi")
@@ -361,7 +365,6 @@ def trendyol_iscisi(urunler, simdi):
             time.sleep(random.uniform(2, 4))
         tarayici.close()
     return sonuclar
-
 
 # ---------------- SHOPIFY (popcorner) ve genel ----------------
 
