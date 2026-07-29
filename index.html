@@ -152,8 +152,7 @@ function csvOku(metin) {
 }
 const tl = x => parseFloat(x).toLocaleString("tr-TR") + " TL";
 const kisaTarih = t => t ? t.slice(8, 10) + "." + t.slice(5, 7) + " " + t.slice(11) : "";
-const kimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.varyant, k.hacim,
-                     k.platform, k.satici || ""].join("|");
+const kimlik = k => [k.url, k.satici || ""].join("|");
 const grupKimlik = k => [k.marka, k.seri_adi.toLowerCase(), k.hacim, k.platform].join("|");
 const digerMi = k => (k.satici || "") === "diger satici";
 
