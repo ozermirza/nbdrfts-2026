@@ -260,38 +260,76 @@ def envoy_depo_listesi(sayfa):
     return None
 
 
-def trendyol_dom_fiyat(sayfa):
-    """Buy-box yedegi: fiyat kutusundaki TL degerlerinin en kucugu."""
-    for secici in ("div[class*='price']", "span.prc-dsc", "[data-testid*='price']"):
+def trendyol_winner_fiyat(icerik):
+    """Sayfa metnine gomulu buy-box (winnerVariant) fiyati - en guvenilir kaynak."""
+    m = re.search(
+        r'"winnerVariant".{0,3000}?"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
+        icerik, re.S)
+    if m:
+        return float(m.group(1))
+    m = re.search(
+        r'"winnerVariant".{0,3000}?"sellingPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
+        icerik, re.S)
+    return float(m.group(1)) if m else None
+
+
+def trendyol_ldjson_fiyat(icerik):
+    """Yedek: gomulu resmi urun karti (JSON-LD) icinden fiyat."""
+    for blok in re.findall(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', icerik, re.S
+    ):
         try:
-            el = sayfa.locator(secici).first
-            if el.count() == 0:
-                continue
-            metin = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", el.inner_text(timeout=2000))
-            adaylar = [float(m.replace(".", "").replace(",", "."))
-                       for m in re.findall(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", metin)]
-            if adaylar:
-                return min(adaylar)
-        except Exception:
+            veri = json.loads(blok.strip())
+        except json.JSONDecodeError:
             continue
+        for aday in gez(veri):
+            offers = aday.get("offers")
+            for o in (offers if isinstance(offers, list) else [offers]):
+                if isinstance(o, dict) and (o.get("price") or o.get("lowPrice")):
+                    try:
+                        return float(str(o.get("price") or o.get("lowPrice"))
+                                     .replace(",", "."))
+                    except ValueError:
+                        continue
     return None
 
 
-def dom_satici_bul(sayfa):
-    """Buy-box saticisini sayfadaki 'Bu urun X tarafindan gonderilecektir'
-    cumlesinden okur."""
-    try:
-        html = sayfa.content()
-    except Exception:
+def trendyol_dom_fiyat(sayfa):
+    """Son yedek: gorunur fiyat elemanlarini tara, taksitleri ele, en kucugu al."""
+    adaylar = []
+    for secici in ("div[class*='price']", "span[class*='prc']",
+                   "[data-testid*='price']"):
+        try:
+            for el in sayfa.locator(secici).all()[:8]:
+                try:
+                    metin = el.inner_text(timeout=1500)
+                except Exception:
+                    continue
+                metin = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", metin)
+                metin = re.sub(r"\d[\d.,]*\s*TL\s*(ve|üzeri|uzeri)", " ", metin)
+                for m in re.findall(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", metin):
+                    adaylar.append(float(m.replace(".", "").replace(",", ".")))
+        except Exception:
+            continue
+        if adaylar:
+            break
+    return min(adaylar) if adaylar else None
+
+
+def dom_satici_bul(icerik):
+    """Buy-box saticisi: '... X tarafindan gonderilecektir' cumlesinden."""
+    yer = icerik.find("tarafından gönderilecektir")
+    if yer < 0:
         return ""
-    yer = html.find("tarafından gönderilecektir")
-    if yer > 0:
-        parca = re.sub(r"<[^>]+>", " ", html[max(0, yer - 300):yer])
-        parca = re.sub(r"\s+", " ", parca).strip()
-        m = re.search(r"Bu ürün\s+(.+?)$", parca)
-        if m:
-            return m.group(1).strip()
-    return ""
+    parca = icerik[max(0, yer - 800):yer]
+    parca = re.sub(r"<[^>]+>", " ", parca)
+    parca = parca.replace("&nbsp;", " ").replace("\xa0", " ")
+    parca = re.sub(r"\s+", " ", parca).strip()
+    m = re.search(r"Bu ürün\s+(.+?)\s*$", parca)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"([A-Za-zÇĞİÖŞÜçğıöşü0-9][\w &'.\-ÇĞİÖŞÜçğıöşü]{1,50})\s*$", parca)
+    return m.group(1).strip() if m else ""
 
 
 def trendyol_iscisi(urunler, simdi):
@@ -319,28 +357,41 @@ def trendyol_iscisi(urunler, simdi):
                     time.sleep(random.uniform(2, 4))
                     continue
 
-                # 1) Buy-box: DOM fiyati + sayfadaki satici cumlesi
-                #    (bulamazsa bir kez daha bekleyip dener)
-                # Buy-box'i sabirla bekle: dene, kaydir, bekle, tekrar dene
-                dom_fiyat, dom_satici = None, ""
-                for deneme in range(4):
-                    dom_fiyat = trendyol_dom_fiyat(sayfa)
-                    dom_satici = dom_satici or dom_satici_bul(sayfa)
-                    if dom_fiyat is not None:
-                        break
-                    sayfa.evaluate("window.scrollTo(0, document.body.scrollHeight/3)")
-                    sayfa.wait_for_timeout(3000)
+                icerik = sayfa.content()
 
-                # 2) Yan panel: envoy deposundan diger saticilar
+                # FIYAT MERDIVENI: winner (gomulu) -> JSON-LD -> gorunur DOM
+                kaynak = "winner"
+                dom_fiyat = trendyol_winner_fiyat(icerik)
+                if dom_fiyat is None:
+                    kaynak = "ldjson"
+                    dom_fiyat = trendyol_ldjson_fiyat(icerik)
+                if dom_fiyat is None:
+                    kaynak = "dom"
+                    for deneme in range(3):
+                        dom_fiyat = trendyol_dom_fiyat(sayfa)
+                        if dom_fiyat is not None:
+                            break
+                        sayfa.evaluate(
+                            f"window.scrollTo(0, document.body.scrollHeight*{deneme+1}/3)")
+                        sayfa.wait_for_timeout(3000)
+                    icerik = sayfa.content()
+
+                # SATICI: gomulu cumleden; yoksa bir kez dibe inip tekrar dene
+                dom_satici = dom_satici_bul(icerik)
+                if not dom_satici:
+                    sayfa.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    sayfa.wait_for_timeout(2000)
+                    dom_satici = dom_satici_bul(sayfa.content())
+
+                # DIGER SATICILAR: yan panel (envoy deposu)
                 envoy = envoy_depo_listesi(sayfa) or []
-
-                # 3) Kayitlari kur
                 digerler = [f for a, f in envoy
                             if normalize_satici(a) not in ANA_SATICILAR]
+
                 ana = None
                 if dom_fiyat is not None:
                     if dom_satici and normalize_satici(dom_satici) not in ANA_SATICILAR:
-                        digerler.append(dom_fiyat)  # buy-box baska saticida
+                        digerler.append(dom_fiyat)
                     else:
                         ana = (dom_satici, dom_fiyat)
                 else:
@@ -360,7 +411,7 @@ def trendyol_iscisi(urunler, simdi):
                                           varyant=model))
                 print(f"[trendyol] {model[:40]}: ana={ana if ana else '-'} "
                       f"diger_min={min(digerler) if digerler else '-'} "
-                      f"[satici_dom={dom_satici or '-'}]")
+                      f"[{kaynak}, satici_dom={dom_satici or '-'}]")
             except Exception:
                 sonuclar.append(kayit(u, simdi, None, "baglanti_hatasi", varyant=model))
                 print(f"[trendyol] {model[:40]}: baglanti_hatasi")
@@ -368,7 +419,6 @@ def trendyol_iscisi(urunler, simdi):
             time.sleep(random.uniform(2, 4))
         tarayici.close()
     return sonuclar
-
 # ---------------- SHOPIFY (popcorner) ve genel ----------------
 
 def shopify_dokum_al(alan_adi):
