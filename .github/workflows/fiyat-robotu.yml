@@ -4,7 +4,7 @@ on:
   # Zamanlama UTC ile yazilir. Turkiye = UTC+3.
   # "0 5-19/2 * * *" -> TR saatiyle 08:00-22:00 arasi 2 saatte bir calis.
   schedule:
-    - cron: "0 5-19/2 * * *"
+    - cron: "0 3-21 * * *"
   # Actions sekmesinden elle baslatma dugmesi (testler icin):
   workflow_dispatch:
 # Robotun sonuc dosyasini repoya kaydedebilmesi icin yazma izni:
