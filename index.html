@@ -146,10 +146,9 @@ function etiket(k) {
   return linktenModel(k.url) || "(model bilinmiyor)";
 }
 
-// Filtre boyutlari: alan adi -> gruptaki karsiligi
 const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür": "tur" };
 let gruplar = [], siralama = { k: null, yon: 1 };
-let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };  // deger -> false ise kapali
+let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
 
 const aktif = (b, d) => durumlar[b][d] !== false;
 
@@ -214,7 +213,6 @@ async function baslat() {
   ciz();
 }
 
-// Kaskad: bu boyutun seceneklerini, DIGER boyutlarin secimlerine gore daralt
 function secenekler(boyut) {
   const uygun = gruplar.filter(g =>
     Object.values(BOYUTLAR).every(b => b === boyut || aktif(b, g[b])));
@@ -288,7 +286,10 @@ function ciz() {
       let rozet = "";
       if (d.yon === "dusus") rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
       if (d.yon === "artis") rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
-      if (!rozet && d.fiyat) rozet = `<span class="adet">grup fiyatından farklı</span>`;
+      if (!rozet && d.fiyat && g.fiyat) {
+        const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
+        rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
+      }
       satirlar += `<tr class="detay">
         <td>↳ model</td><td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a></td>
         <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
