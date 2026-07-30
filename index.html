@@ -33,6 +33,7 @@
   .acButon { border: none; background: none; color: var(--soluk); cursor: pointer;
              font-size: 12px; padding: 0 6px 0 0; }
   .acButon:hover { color: var(--vurgu); }
+  .grafikBtn { margin-left: 6px; }
 
   .kartlar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
   .kart { background: var(--yuzey); border: 1px solid var(--cizgi);
@@ -87,6 +88,22 @@
                   color: var(--soluk); border-radius: 5px; padding: 0 6px;
                   font-size: 11px; margin-left: 6px; }
 
+  /* Grafik penceresi */
+  .modalArka { position: fixed; inset: 0; background: rgba(0,0,0,.55);
+               display: none; align-items: center; justify-content: center;
+               z-index: 50; }
+  .modalArka.acikM { display: flex; }
+  .modalKutu { background: var(--yuzey); border: 1px solid var(--cizgi);
+               border-radius: 14px; padding: 18px; width: min(720px, 94vw);
+               box-shadow: 0 8px 40px rgba(0,0,0,.5); }
+  .modalUst { display: flex; justify-content: space-between; align-items: center;
+              margin-bottom: 6px; gap: 10px; }
+  .modalUst .baslik { font-size: 14px; font-weight: 600; overflow: hidden;
+                      text-overflow: ellipsis; white-space: nowrap; }
+  .aciklamaSatiri { font-size: 12px; color: var(--soluk); margin-bottom: 10px; }
+  .aciklamaSatiri .urunRenk { color: var(--vurgu); font-weight: 600; }
+  canvas { width: 100%; height: 300px; display: block; }
+
   @media (max-width: 800px) {
     body { padding: 12px; }
     .duzen { flex-direction: column; }
@@ -98,6 +115,7 @@
     table { min-width: 720px; }
     th .tutamac { display: none; }
     td, th { padding: 8px 10px; font-size: 13px; }
+    canvas { height: 220px; }
   }
 </style>
 </head>
@@ -141,6 +159,19 @@
     </div>
   </div>
 
+  <div class="modalArka" id="modalArka">
+    <div class="modalKutu">
+      <div class="modalUst">
+        <div class="baslik" id="modalBaslik">Fiyat geçmişi</div>
+        <button class="btn" id="modalKapat">✕</button>
+      </div>
+      <div class="aciklamaSatiri">
+        <span class="urunRenk">— ürün fiyatı</span> &nbsp;·&nbsp; - - grup ortak fiyatı
+      </div>
+      <canvas id="grafik"></canvas>
+    </div>
+  </div>
+
 <script>
 function csvOku(metin) {
   const satirlar = metin.trim().split("\n");
@@ -176,12 +207,12 @@ const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür":
 let gruplar = [], siralama = { k: null, yon: 1 };
 let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
 let acikGruplar = new Set();
-let gecmis = new Map();
+let gecmis = new Map();        // kimlik -> [{tarih, fiyat}]
+let grupGecmis = new Map();    // grupKimlik -> [{tarih, fiyat(mod)}]
 let sonTurZamani = 0;
 
 const aktif = (b, d) => durumlar[b][d] !== false;
 
-// Mevcut fiyatin hangi turda basladigini bulur
 function degisimAni(k) {
   const h = gecmis.get(kimlik(k));
   if (!h || !k.fiyat) return null;
@@ -191,17 +222,15 @@ function degisimAni(k) {
   return h[i + 1].tarih;
 }
 
-// Indirim kapanisi: fiyat daha dusuk bir seviyeden grup fiyatina (veya ustune)
-// YUKSELMISSE ve bu son 48 saat icinde olduysa, kapanis anini doner
 function kapanmaAni(k, grupFiyati) {
   if (!k.fiyat || !grupFiyati) return null;
-  if (parseFloat(k.fiyat) < parseFloat(grupFiyati)) return null; // hala indirimde
+  if (parseFloat(k.fiyat) < parseFloat(grupFiyati)) return null;
   const h = gecmis.get(kimlik(k));
   if (!h) return null;
   let i = h.length - 1;
   while (i >= 0 && h[i].fiyat === k.fiyat) i--;
   if (i < 0) return null;
-  if (parseFloat(h[i].fiyat) >= parseFloat(k.fiyat)) return null; // dusus degil yukselis ariyoruz
+  if (parseFloat(h[i].fiyat) >= parseFloat(k.fiyat)) return null;
   const an = h[i + 1].tarih;
   return (sonTurZamani - zaman(an)) <= 48 * 3600 * 1000 ? an : null;
 }
@@ -218,6 +247,23 @@ async function baslat() {
       if (!gecmis.has(a)) gecmis.set(a, []);
       gecmis.get(a).push({ tarih: k.tarih, fiyat: k.fiyat });
     });
+
+  // Grup ortak fiyat (mod) gecmisi: her tur icin ayri hesapla
+  const turGrup = new Map(); // grupKimlik|tarih -> {fiyat: adet}
+  kayitlar.forEach(k => {
+    if (!k.fiyat || digerMi(k)) return;
+    const a = grupKimlik(k) + "@" + k.tarih;
+    if (!turGrup.has(a)) turGrup.set(a, {});
+    const s = turGrup.get(a);
+    s[k.fiyat] = (s[k.fiyat] || 0) + 1;
+  });
+  [...turGrup.entries()].sort((x, y) => x[0].localeCompare(y[0])).forEach(([a, s]) => {
+    const [gk, tarih] = a.split("@");
+    const mod = Object.keys(s).sort((p, q) => s[q] - s[p])[0];
+    if (!grupGecmis.has(gk)) grupGecmis.set(gk, []);
+    grupGecmis.get(gk).push({ tarih, fiyat: mod });
+  });
+  grupGecmis.forEach(l => l.sort((a, b) => a.tarih.localeCompare(b.tarih)));
 
   const son = kayitlar.filter(k => k.tarih === sonTur);
   const onceki = new Map(kayitlar.filter(k => k.tarih === oncekiTur)
@@ -259,7 +305,6 @@ async function baslat() {
     };
   });
 
-  // Kartlar: indirimli = grup fiyatinin ALTINDA satilan ana urunler (+tur-arasi dusenler)
   let indirimli = 0, grupUstu = 0;
   gruplar.forEach(g => g.anaUyeler.forEach(u => {
     if (!u.fiyat || !g.fiyat) return;
@@ -284,9 +329,17 @@ async function baslat() {
       siralama.yon = siralama.k === th.dataset.k ? -siralama.yon : 1;
       siralama.k = th.dataset.k; ciz();
     }));
+  document.getElementById("modalKapat").addEventListener("click", modalKapat);
+  document.getElementById("modalArka").addEventListener("click", e => {
+    if (e.target.id === "modalArka") modalKapat();
+  });
   sutunGenislet();
   temaKur();
   ciz();
+}
+
+function modalKapat() {
+  document.getElementById("modalArka").classList.remove("acikM");
 }
 
 function secenekler(boyut) {
@@ -339,9 +392,11 @@ function detaySatiri(d, g) {
     rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
   }
   const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
+  const gBtn = `<button class="btnMini grafikBtn" data-kim="${encodeURIComponent(kimlik(d))}"
+    data-grup="${encodeURIComponent(g.anahtar)}" data-ad="${etiket(d).replace(/"/g, "&quot;")}">📈</button>`;
   return `<tr class="detay">
     <td>↳ model</td>
-    <td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a>${saticiHtml}</td>
+    <td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a>${saticiHtml}${gBtn}</td>
     <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
     <td>${rozet}</td></tr>`;
 }
@@ -382,11 +437,14 @@ function ciz() {
     const detayNotu = acik
       ? `<span class="adet">▾ tümü açık</span>`
       : (detaylar.length ? `<span class="adet">${detaylar.length} detay ↓</span>` : "");
+    const grupGBtn = `<button class="btnMini grafikBtn" data-kim=""
+      data-grup="${encodeURIComponent(g.anahtar)}"
+      data-ad="${(g.marka + " " + g.seri_adi + " " + g.hacim + " grup fiyatı").replace(/"/g, "&quot;")}">📈</button>`;
     let satirlar = `<tr>
       <td><button class="acButon" data-g="${g.anahtar}">${acik ? "▾" : "▸"}</button>${g.marka}</td>
       <td>${g.seri_adi}</td><td>${g.hacim}</td>
       <td>${g.platform}</td>
-      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span></td>
+      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}</td>
       <td>${detayNotu}</td>
     </tr>`;
     detaylar.forEach(d => satirlar += detaySatiri(d, g));
@@ -399,6 +457,93 @@ function ciz() {
       acikGruplar.has(g) ? acikGruplar.delete(g) : acikGruplar.add(g);
       ciz();
     }));
+  document.querySelectorAll(".grafikBtn").forEach(b =>
+    b.addEventListener("click", () =>
+      grafikAc(decodeURIComponent(b.dataset.kim), decodeURIComponent(b.dataset.grup),
+               b.dataset.ad)));
+}
+
+// ---------------- GRAFIK ----------------
+function grafikAc(kim, grupAnahtari, baslik) {
+  const urunH = kim ? (gecmis.get(kim) || []) : [];
+  const grupH = grupGecmis.get(grupAnahtari) || [];
+  if (!urunH.length && !grupH.length) return;
+
+  document.getElementById("modalBaslik").textContent = baslik;
+  document.getElementById("modalArka").classList.add("acikM");
+
+  const c = document.getElementById("grafik");
+  const dpr = window.devicePixelRatio || 1;
+  const W = c.clientWidth, H = c.clientHeight;
+  c.width = W * dpr; c.height = H * dpr;
+  const x = c.getContext("2d");
+  x.scale(dpr, dpr);
+  x.clearRect(0, 0, W, H);
+
+  const stil = getComputedStyle(document.body);
+  const rSoluk = stil.getPropertyValue("--soluk").trim();
+  const rVurgu = stil.getPropertyValue("--vurgu").trim();
+  const rCizgi = stil.getPropertyValue("--cizgi").trim();
+
+  const hepsi = urunH.concat(grupH);
+  const t0 = Math.min(...hepsi.map(n => zaman(n.tarih)));
+  const t1 = Math.max(...hepsi.map(n => zaman(n.tarih)));
+  const fList = hepsi.map(n => parseFloat(n.fiyat));
+  let f0 = Math.min(...fList), f1 = Math.max(...fList);
+  const pay = Math.max((f1 - f0) * 0.15, f1 * 0.02);
+  f0 -= pay; f1 += pay;
+
+  const M = { sol: 64, sag: 16, ust: 14, alt: 26 };
+  const px = t => t1 === t0 ? M.sol + (W - M.sol - M.sag) / 2
+    : M.sol + (t - t0) / (t1 - t0) * (W - M.sol - M.sag);
+  const py = f => M.ust + (f1 - f) / (f1 - f0) * (H - M.ust - M.alt);
+
+  // yatay izgara + fiyat etiketleri
+  x.font = "11px sans-serif";
+  x.textAlign = "right"; x.textBaseline = "middle";
+  for (let i = 0; i <= 4; i++) {
+    const f = f0 + (f1 - f0) * i / 4;
+    const y = py(f);
+    x.strokeStyle = rCizgi; x.lineWidth = 1;
+    x.beginPath(); x.moveTo(M.sol, y); x.lineTo(W - M.sag, y); x.stroke();
+    x.fillStyle = rSoluk;
+    x.fillText(Math.round(f).toLocaleString("tr-TR"), M.sol - 8, y);
+  }
+  // x ekseni tarih etiketleri
+  x.textAlign = "center"; x.textBaseline = "top";
+  x.fillStyle = rSoluk;
+  x.fillText(kisaTarih(new Date(t0).toISOString().slice(0,16).replace("T"," ")), M.sol + 30, H - M.alt + 8);
+  x.fillText(kisaTarih(new Date(t1).toISOString().slice(0,16).replace("T"," ")), W - M.sag - 40, H - M.alt + 8);
+
+  function seriCiz(liste, renk, kesikli, kalin) {
+    if (!liste.length) return;
+    x.strokeStyle = renk; x.lineWidth = kalin;
+    x.setLineDash(kesikli ? [6, 5] : []);
+    x.beginPath();
+    liste.forEach((n, i) => {
+      const X = px(zaman(n.tarih)), Y = py(parseFloat(n.fiyat));
+      if (i === 0) x.moveTo(X, Y);
+      else { x.lineTo(X, py(parseFloat(liste[i-1].fiyat))); x.lineTo(X, Y); }
+    });
+    // son noktadan grafigin sagina uzat
+    const sonN = liste[liste.length - 1];
+    x.lineTo(W - M.sag, py(parseFloat(sonN.fiyat)));
+    x.stroke();
+    x.setLineDash([]);
+  }
+
+  seriCiz(grupH, rSoluk, true, 1.5);
+  seriCiz(urunH, rVurgu, false, 2.5);
+
+  // urun son fiyat noktasi + etiketi
+  const kaynak = urunH.length ? urunH : grupH;
+  const sonN = kaynak[kaynak.length - 1];
+  const sy = py(parseFloat(sonN.fiyat));
+  x.fillStyle = urunH.length ? rVurgu : rSoluk;
+  x.beginPath(); x.arc(W - M.sag - 4, sy, 4, 0, Math.PI * 2); x.fill();
+  x.textAlign = "right"; x.textBaseline = "bottom";
+  x.font = "bold 12px sans-serif";
+  x.fillText(tl(sonN.fiyat), W - M.sag - 10, sy - 6);
 }
 
 function temaKur() {
