@@ -73,10 +73,9 @@
   th:nth-child(2) { width: 12%; }
   th:nth-child(3) { width: 8%; }
   th:nth-child(4) { width: 12%; }
-  th:nth-child(5) { width: 22%; }
-  th:nth-child(6) { width: 20%; }
-  th:nth-child(7) { width: 9%; }
-  th:nth-child(8) { width: 6%; }
+  th:nth-child(5) { width: 26%; }
+  th:nth-child(6) { width: 21%; }
+  th:nth-child(7) { width: 10%; }
   td { padding: 9px 12px; border-bottom: 1px solid var(--cizgi); font-size: 14px;
        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
@@ -163,7 +162,6 @@
           <th data-k="fiyat">Fiyat<span class="tutamac"></span></th>
           <th data-k="degisim">Değişim<span class="tutamac"></span></th>
           <th>Değişim tarihi<span class="tutamac"></span></th>
-          <th>% İndirim<span class="tutamac"></span></th>
         </tr></thead>
         <tbody id="tabloGovde"></tbody>
       </table>
@@ -389,7 +387,7 @@ function panelCiz() {
 }
 
 function detaySatiri(d, g) {
-  let rozet = "", tarihH = "", yuzdeH = "—";
+  let rozet = "", tarihH = "";
   const an = kisaTarih(degisimAni(d));
   if (d.kapandi) {
     rozet = `<span class="rozet kapandi">indirim kapandı</span>`;
@@ -405,10 +403,10 @@ function detaySatiri(d, g) {
     rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
     tarihH = an || "";
   }
+  let yuzdeH = "";
   if (d.fiyat && g.fiyat && parseFloat(g.fiyat) > 0 && d.fiyat !== g.fiyat) {
     const oran = (parseFloat(d.fiyat) - parseFloat(g.fiyat)) / parseFloat(g.fiyat) * 100;
-    yuzdeH = `<span class="${oran < 0 ? "dusus" : "artis"} rozet">${oran > 0 ? "+" : ""}%${Math.abs(oran).toFixed(0)}</span>`;
-    if (oran > 0) yuzdeH = yuzdeH.replace("%", "%");
+    yuzdeH = ` <span class="rozet ${oran < 0 ? "dusus" : "artis"}">${oran < 0 ? "-" : "+"}%${Math.abs(oran).toFixed(0)}</span>`;
   }
   const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
   const gBtn = `<button class="btnMini grafikBtn" data-kim="${encodeURIComponent(kimlik(d))}"
@@ -416,10 +414,9 @@ function detaySatiri(d, g) {
   return `<tr class="detay">
     <td>↳ model</td>
     <td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a>${saticiHtml}${gBtn}</td>
-    <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
+    <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a>${yuzdeH}</td>
     <td>${rozet}</td>
-    <td class="adet">${tarihH || "—"}</td>
-    <td>${yuzdeH}</td></tr>`;
+    <td class="adet">${tarihH || "—"}</td></tr>`;
 }
 
 function ciz() {
