@@ -297,17 +297,144 @@ def model_adi(url):
     return re.sub(r"-p-\d+$", "", yol).replace("-", " ")
 
 
+def kart_fiyatlari(icerik):
+    """Magaza sayfasi metninden {urun_no: guncel_fiyat} cikarir.
+    Kartlar <a id="NO" class="product-card" ...> ile baslar; kartin icindeki
+    price-section guncel fiyattir, strikethrough (ustu cizili) eski fiyat elenir."""
+    sonuc = {}
+    parcalar = re.split(r'<a id="(\d+)" class="product-card"', icerik)
+    # parcalar: [oncesi, no1, govde1, no2, govde2, ...]
+    for i in range(1, len(parcalar) - 1, 2):
+        no, govde = parcalar[i], parcalar[i + 1]
+        guncel = None
+        for m in re.finditer(r'class="([^"]*price[^"]*)"[^>]*>\s*([\d.,]+)\s*TL', govde):
+            sinif, ham = m.group(1), m.group(2)
+            if "strikethrough" in sinif or "old" in sinif:
+                continue
+            deger = float(ham.replace(".", "").replace(",", "."))
+            if "price-section" in sinif:
+                guncel = deger
+                break
+            if guncel is None:
+                guncel = deger
+        if guncel is not None:
+            sonuc[no] = guncel
+    return sonuc
+
+
+def cv_fiyat(p):
+    """color-variants kaydindaki price sozlugunden guncel fiyati ceker."""
+    if not isinstance(p, dict):
+        return None
+    for anahtar in ("discounted", "sellingPrice", "current", "value", "price"):
+        v = p.get(anahtar)
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+        if isinstance(v, dict) and isinstance(v.get("value"), (int, float)):
+            return float(v["value"])
+    # metin alanlari: "2.090 TL" gibi
+    for anahtar, v in p.items():
+        if anahtar.lower().startswith("old"):
+            continue
+        if isinstance(v, str):
+            m = re.search(r"([\d.]+(?:,\d+)?)\s*TL", v)
+            if m:
+                return float(m.group(1).replace(".", "").replace(",", "."))
+    # kalan sayisal alanlar (old haric)
+    adaylar = [float(v) for k, v in p.items()
+               if isinstance(v, (int, float)) and v > 0
+               and not k.lower().startswith("old")]
+    return min(adaylar) if adaylar else None
+
+
+def trendyol_winner_fiyat(icerik):
+    m = re.search(
+        r'"winnerVariant".{0,3000}?"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
+        icerik, re.S)
+    if m:
+        return float(m.group(1))
+    m = re.search(
+        r'"winnerVariant".{0,3000}?"sellingPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
+        icerik, re.S)
+    return float(m.group(1)) if m else None
+
+
+def trendyol_ldjson_fiyat(icerik):
+    for blok in re.findall(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', icerik, re.S
+    ):
+        try:
+            veri = json.loads(blok.strip())
+        except json.JSONDecodeError:
+            continue
+        for aday in gez(veri):
+            offers = aday.get("offers")
+            for o in (offers if isinstance(offers, list) else [offers]):
+                if isinstance(o, dict) and (o.get("price") or o.get("lowPrice")):
+                    try:
+                        return float(str(o.get("price") or o.get("lowPrice"))
+                                     .replace(",", "."))
+                    except ValueError:
+                        continue
+    return None
+
+
+def trendyol_dom_fiyat(sayfa):
+    adaylar = []
+    for secici in ("div[class*='price']", "span[class*='prc']",
+                   "[data-testid*='price']"):
+        try:
+            for el in sayfa.locator(secici).all()[:8]:
+                try:
+                    metin = el.inner_text(timeout=1500)
+                except Exception:
+                    continue
+                metin = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", metin)
+                metin = re.sub(r"\d[\d.,]*\s*TL\s*(ve|üzeri|uzeri)", " ", metin)
+                for m in re.findall(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", metin):
+                    adaylar.append(float(m.replace(".", "").replace(",", ".")))
+        except Exception:
+            continue
+        if adaylar:
+            break
+    return min(adaylar) if adaylar else None
+
+
+def dom_satici_bul(icerik):
+    yer = icerik.find("tarafından gönderilecektir")
+    if yer < 0:
+        return ""
+    parca = icerik[max(0, yer - 800):yer]
+    parca = re.sub(r"<[^>]+>", " ", parca)
+    parca = parca.replace("&nbsp;", " ").replace("\xa0", " ")
+    parca = re.sub(r"\s+", " ", parca).strip()
+    m = re.search(r"Bu ürün\s+(.+?)\s*$", parca)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"([A-Za-zÇĞİÖŞÜçğıöşü0-9][\w &'.\-ÇĞİÖŞÜçğıöşü]{1,50})\s*$", parca)
+    return m.group(1).strip() if m else ""
+
+
 def trendyol_iscisi(urunler, simdi):
     from playwright.sync_api import sync_playwright
     sonuclar = []
 
-    # Takip listesindeki Trendyol urunleri: numara -> satir
     no_map = {}
     for u in urunler:
         n = urun_no(u["url"])
         if n:
             no_map[n] = u
     islenen = set()
+
+    def isle(n, fiyat, satici, varyant_adi=None):
+        if n in no_map and n not in islenen and fiyat is not None:
+            u = no_map[n]
+            sonuclar.append(kayit(u, simdi, fiyat, "ok",
+                                  varyant=varyant_adi or model_adi(u["url"]),
+                                  satici=satici))
+            islenen.add(n)
+            return 1
+        return 0
 
     with sync_playwright() as p:
         tarayici = p.chromium.launch()
@@ -318,55 +445,60 @@ def trendyol_iscisi(urunler, simdi):
             {"name": "storefrontId", "value": "1", "domain": ".trendyol.com", "path": "/"},
         ])
 
-        # ---- 1) MAGAZA TARAMASI ----
+        # ---- 1) MAGAZA TARAMASI: kart metni + color-variants dinleyicisi ----
         for mag in MAGAZALAR:
             for pi in range(1, 16):
                 ayrac = "&" if "?" in mag["taban"] else "?"
                 url = f"{mag['taban']}{ayrac}pi={pi}"
-                yakalanan = []
+                cv_cevaplar = []
                 sayfa = baglam.new_page()
 
-                def yanit_topla(yanit):
+                def topla(yanit):
                     try:
-                        if "json" not in (yanit.headers.get("content-type") or ""):
-                            return
-                        govde = yanit.text()
-                        if '"products"' in govde:
-                            yakalanan.append(json.loads(govde))
+                        if "color-variants" in yanit.url:
+                            cv_cevaplar.append(yanit.text())
                     except Exception:
                         pass
-                sayfa.on("response", yanit_topla)
+                sayfa.on("response", topla)
 
-                sayfa_urunleri = []
+                kartlar = {}
                 try:
                     sayfa.goto(url, timeout=60000, wait_until="domcontentloaded")
-                    sayfa.wait_for_timeout(4500)
-                    for veri in yakalanan:
-                        for d in gez(veri):
-                            if isinstance(d.get("products"), list):
-                                sayfa_urunleri.extend(
-                                    it for it in d["products"] if isinstance(it, dict))
+                    sayfa.wait_for_timeout(4000)
+                    sayfa.evaluate("window.scrollTo(0, 3000)")
+                    sayfa.wait_for_timeout(2500)
+                    kartlar = kart_fiyatlari(sayfa.content())
                 except Exception:
                     pass
                 sayfa.close()
 
                 yeni = 0
-                for it in sayfa_urunleri:
-                    n = str(it.get("id") or "")
-                    if n in no_map and n not in islenen:
-                        f = magaza_urun_fiyati(it)
-                        if f is not None:
-                            u = no_map[n]
-                            sonuclar.append(kayit(u, simdi, f, "ok",
-                                                  varyant=model_adi(u["url"]),
-                                                  satici=mag["satici"]))
-                            islenen.add(n)
-                            yeni += 1
-                print(f"[magaza:{mag['ad']}] sayfa {pi}: {len(sayfa_urunleri)} urun "
-                      f"gorüldu, {yeni} eslesme (toplam {len(islenen)}/{len(no_map)})")
-                if not sayfa_urunleri:
+                for n, f in kartlar.items():
+                    yeni += isle(n, f, mag["satici"])
+                for govde in cv_cevaplar:
+                    try:
+                        veri = json.loads(govde)
+                    except json.JSONDecodeError:
+                        continue
+                    for liste in veri.values():
+                        if not isinstance(liste, list):
+                            continue
+                        for it in liste:
+                            if isinstance(it, dict):
+                                yeni += isle(str(it.get("id") or ""),
+                                             cv_fiyat(it.get("price")),
+                                             mag["satici"],
+                                             varyant_adi=it.get("name"))
+                print(f"[magaza:{mag['ad']}] sayfa {pi}: {len(kartlar)} kart, "
+                      f"{len(cv_cevaplar)} varyant cevabi, {yeni} yeni eslesme "
+                      f"(toplam {len(islenen)}/{len(no_map)})")
+                if not kartlar:
+                    break
+                if len(islenen) == len(no_map):
                     break
                 time.sleep(random.uniform(2, 3))
+            if len(islenen) == len(no_map):
+                break
 
         # ---- 2) YEDEK: magazada bulunamayanlar icin detay sayfasi ----
         kalanlar = [no_map[n] for n in no_map if n not in islenen]
