@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 9)
-# Yeni: Trendyol'da uc kanalli okuma:
-#   1) API dinleyici (sayfanin kendi arka plan isteginden satici+fiyat)
-#   2) envoy deposu (yan paneldeki "diger saticilar")
-#   3) DOM fiyat kutusu (buy-box yedegi)
-# Boylece one cikan satici + diger saticilar birlikte yakalanir.
+# FIYAT RADARI - scraper.py (surum 10)
+# Yeni: Trendyol MAGAZA TARAMASI - urun urun gezmek yerine magaza listesinin
+# arka plan JSON'undan toplu okuma. Bulunamayanlar icin detay-sayfasi yedegi.
+# "diger satici" takibi kaldirildi (kullanici karari).
 
 import csv
 import difflib
@@ -29,6 +27,18 @@ SUTUNLAR = ["tarih", "marka", "seri_adi", "varyant", "kategori1", "hacim",
 
 # Markalarin resmi/ana saticilari (kucuk harf, bosluksuz).
 ANA_SATICILAR = {"popcorner", "sipnjoy"}
+
+# ---- TRENDYOL MAGAZALARI ----
+# Yeni marka eklerken buraya bir satir ekle:
+#   ad     : log'da gorunecek isim
+#   satici : fiyatlar.csv'ye yazilacak satici adi
+#   taban  : magaza/liste sayfasinin adresi (pi= parametresi OLMADAN)
+MAGAZALAR = [
+    {"ad": "PopCorner-Trixie", "satici": "Pop Corner",
+     "taban": "https://www.trendyol.com/sr?wb=103069&lc=103714%2C1193&os=1&mid=849084"},
+    {"ad": "SipnJoy", "satici": "SipnJoy",
+     "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
+]
 
 
 def normalize_satici(ad):
@@ -189,79 +199,27 @@ def nextdata_iscisi(urunler, simdi):
 
 # ---------------- TRENDYOL ----------------
 
-def _fiyat_alanindan(d):
-    """Bir sozlukten guncel fiyati ceker: once discountedPrice, sonra sellingPrice."""
-    kaynaklar = [d.get("price")] if isinstance(d.get("price"), dict) else []
-    kaynaklar.append(d)
-    for p in kaynaklar:
-        if not isinstance(p, dict):
-            continue
-        for alan in ("discountedPrice", "sellingPrice"):
-            v = p.get(alan)
-            if isinstance(v, dict) and isinstance(v.get("value"), (int, float)):
-                return float(v["value"])
-            if isinstance(v, (int, float)):
-                return float(v)
+def _sayi_cek(d, alanlar):
+    for alan in alanlar:
+        v = d.get(alan)
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, dict) and isinstance(v.get("value"), (int, float)):
+            return float(v["value"])
     return None
 
 
-def satici_listesi_cikar(veri):
-    """Herhangi bir JSON agacindan [(satici, fiyat), ...] cikarir.
-    Ilk eleman, bulunabildiyse one cikan (buy-box) saticidir."""
-    kazanan = None
-    for d in gez(veri):
-        if isinstance(d.get("otherMerchants"), list) and "merchant" in d:
-            kazanan = d
-            break
-    if kazanan is None:
-        for d in gez(veri):
-            if isinstance(d.get("merchant"), dict) and _fiyat_alanindan(d) is not None:
-                kazanan = d
-                kazanan.setdefault("otherMerchants", [])
-                break
-    if kazanan is None:
-        return None
-    liste = []
-    ad = (kazanan.get("merchant") or {}).get("name") or ""
-    f = _fiyat_alanindan(kazanan)
-    if f is not None:
-        liste.append((ad, f))
-    for o in kazanan.get("otherMerchants", []):
-        if not isinstance(o, dict):
-            continue
-        oad = (o.get("merchant") or {}).get("name") or ""
-        of = _fiyat_alanindan(o)
-        if of is not None:
-            liste.append((oad, of))
-    return liste or None
-
-
-def envoy_depo_listesi(sayfa):
-    """Sayfadaki PROPS/STATE depolarindan satici listesi cikarir (yan panel)."""
-    try:
-        ham = sayfa.evaluate("""() => {
-            const out = {};
-            for (const k of Object.getOwnPropertyNames(window)) {
-                if (k.endsWith('PROPS') || k.includes('STATE') || k.includes('INITIAL')) {
-                    try { JSON.stringify(window[k]); out[k] = window[k]; } catch (e) {}
-                }
-            }
-            return JSON.stringify(out);
-        }""")
-        if not ham or ham == "{}":
-            return None
-        depolar = json.loads(ham)
-    except Exception:
-        return None
-    for depo in depolar.values():
-        liste = satici_listesi_cikar(depo)
-        if liste:
-            return liste
+def magaza_urun_fiyati(it):
+    """Magaza JSON'undaki bir urun kaydindan guncel fiyati ceker."""
+    p = it.get("price")
+    for d in ([p] if isinstance(p, dict) else []) + [it]:
+        f = _sayi_cek(d, ("discountedPrice", "sellingPrice", "buyingPrice"))
+        if f is not None:
+            return f
     return None
 
 
 def trendyol_winner_fiyat(icerik):
-    """Sayfa metnine gomulu buy-box (winnerVariant) fiyati - en guvenilir kaynak."""
     m = re.search(
         r'"winnerVariant".{0,3000}?"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
         icerik, re.S)
@@ -274,7 +232,6 @@ def trendyol_winner_fiyat(icerik):
 
 
 def trendyol_ldjson_fiyat(icerik):
-    """Yedek: gomulu resmi urun karti (JSON-LD) icinden fiyat."""
     for blok in re.findall(
         r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', icerik, re.S
     ):
@@ -295,7 +252,6 @@ def trendyol_ldjson_fiyat(icerik):
 
 
 def trendyol_dom_fiyat(sayfa):
-    """Son yedek: gorunur fiyat elemanlarini tara, taksitleri ele, en kucugu al."""
     adaylar = []
     for secici in ("div[class*='price']", "span[class*='prc']",
                    "[data-testid*='price']"):
@@ -317,7 +273,6 @@ def trendyol_dom_fiyat(sayfa):
 
 
 def dom_satici_bul(icerik):
-    """Buy-box saticisi: '... X tarafindan gonderilecektir' cumlesinden."""
     yer = icerik.find("tarafından gönderilecektir")
     if yer < 0:
         return ""
@@ -332,9 +287,28 @@ def dom_satici_bul(icerik):
     return m.group(1).strip() if m else ""
 
 
+def urun_no(url):
+    m = re.search(r"-p-(\d+)", url)
+    return m.group(1) if m else None
+
+
+def model_adi(url):
+    yol = urlparse(url.strip()).path.split("/")[-1]
+    return re.sub(r"-p-\d+$", "", yol).replace("-", " ")
+
+
 def trendyol_iscisi(urunler, simdi):
     from playwright.sync_api import sync_playwright
     sonuclar = []
+
+    # Takip listesindeki Trendyol urunleri: numara -> satir
+    no_map = {}
+    for u in urunler:
+        n = urun_no(u["url"])
+        if n:
+            no_map[n] = u
+    islenen = set()
+
     with sync_playwright() as p:
         tarayici = p.chromium.launch()
         baglam = tarayici.new_context(locale="tr-TR", user_agent=BASLIKLAR["User-Agent"])
@@ -343,82 +317,102 @@ def trendyol_iscisi(urunler, simdi):
             {"name": "language", "value": "tr", "domain": ".trendyol.com", "path": "/"},
             {"name": "storefrontId", "value": "1", "domain": ".trendyol.com", "path": "/"},
         ])
-        for u in urunler:
+
+        # ---- 1) MAGAZA TARAMASI ----
+        for mag in MAGAZALAR:
+            for pi in range(1, 16):
+                ayrac = "&" if "?" in mag["taban"] else "?"
+                url = f"{mag['taban']}{ayrac}pi={pi}"
+                yakalanan = []
+                sayfa = baglam.new_page()
+
+                def yanit_topla(yanit):
+                    try:
+                        if "json" not in (yanit.headers.get("content-type") or ""):
+                            return
+                        govde = yanit.text()
+                        if '"products"' in govde:
+                            yakalanan.append(json.loads(govde))
+                    except Exception:
+                        pass
+                sayfa.on("response", yanit_topla)
+
+                sayfa_urunleri = []
+                try:
+                    sayfa.goto(url, timeout=60000, wait_until="domcontentloaded")
+                    sayfa.wait_for_timeout(4500)
+                    for veri in yakalanan:
+                        for d in gez(veri):
+                            if isinstance(d.get("products"), list):
+                                sayfa_urunleri.extend(
+                                    it for it in d["products"] if isinstance(it, dict))
+                except Exception:
+                    pass
+                sayfa.close()
+
+                yeni = 0
+                for it in sayfa_urunleri:
+                    n = str(it.get("id") or "")
+                    if n in no_map and n not in islenen:
+                        f = magaza_urun_fiyati(it)
+                        if f is not None:
+                            u = no_map[n]
+                            sonuclar.append(kayit(u, simdi, f, "ok",
+                                                  varyant=model_adi(u["url"]),
+                                                  satici=mag["satici"]))
+                            islenen.add(n)
+                            yeni += 1
+                print(f"[magaza:{mag['ad']}] sayfa {pi}: {len(sayfa_urunleri)} urun "
+                      f"gorüldu, {yeni} eslesme (toplam {len(islenen)}/{len(no_map)})")
+                if not sayfa_urunleri:
+                    break
+                time.sleep(random.uniform(2, 3))
+
+        # ---- 2) YEDEK: magazada bulunamayanlar icin detay sayfasi ----
+        kalanlar = [no_map[n] for n in no_map if n not in islenen]
+        if kalanlar:
+            print(f"[trendyol] magazada bulunamayan {len(kalanlar)} urun, "
+                  f"detaydan okunuyor...")
+        for u in kalanlar:
             sayfa = baglam.new_page()
-            yol = urlparse(u["url"].strip()).path.split("/")[-1]
-            model = re.sub(r"-p-\d+$", "", yol).replace("-", " ")
+            model = model_adi(u["url"])
             try:
                 sayfa.goto(u["url"].strip(), timeout=60000, wait_until="domcontentloaded")
                 sayfa.wait_for_timeout(5000)
                 if "select-country" in sayfa.url:
                     sonuclar.append(kayit(u, simdi, None, "ulke_kapisi", varyant=model))
-                    print(f"[trendyol] {model[:40]}: ulke_kapisi")
+                    print(f"[trendyol-detay] {model[:40]}: ulke_kapisi")
                     sayfa.close()
                     time.sleep(random.uniform(2, 4))
                     continue
-
                 icerik = sayfa.content()
-
-                # FIYAT MERDIVENI: winner (gomulu) -> JSON-LD -> gorunur DOM
+                fiyat = trendyol_winner_fiyat(icerik)
                 kaynak = "winner"
-                dom_fiyat = trendyol_winner_fiyat(icerik)
-                if dom_fiyat is None:
+                if fiyat is None:
+                    fiyat = trendyol_ldjson_fiyat(icerik)
                     kaynak = "ldjson"
-                    dom_fiyat = trendyol_ldjson_fiyat(icerik)
-                if dom_fiyat is None:
+                if fiyat is None:
+                    fiyat = trendyol_dom_fiyat(sayfa)
                     kaynak = "dom"
-                    for deneme in range(3):
-                        dom_fiyat = trendyol_dom_fiyat(sayfa)
-                        if dom_fiyat is not None:
-                            break
-                        sayfa.evaluate(
-                            f"window.scrollTo(0, document.body.scrollHeight*{deneme+1}/3)")
-                        sayfa.wait_for_timeout(3000)
-                    icerik = sayfa.content()
-
-                # SATICI: gomulu cumleden; yoksa bir kez dibe inip tekrar dene
-                dom_satici = dom_satici_bul(icerik)
-                if not dom_satici:
-                    sayfa.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    sayfa.wait_for_timeout(2000)
-                    dom_satici = dom_satici_bul(sayfa.content())
-
-                # DIGER SATICILAR: yan panel (envoy deposu)
-                envoy = envoy_depo_listesi(sayfa) or []
-                digerler = [f for a, f in envoy
-                            if normalize_satici(a) not in ANA_SATICILAR]
-
-                ana = None
-                if dom_fiyat is not None:
-                    if dom_satici and normalize_satici(dom_satici) not in ANA_SATICILAR:
-                        digerler.append(dom_fiyat)
-                    else:
-                        ana = (dom_satici, dom_fiyat)
+                satici = dom_satici_bul(icerik)
+                if fiyat is not None:
+                    sonuclar.append(kayit(u, simdi, fiyat, "ok",
+                                          varyant=model, satici=satici))
                 else:
-                    envoy_ana = [(a, f) for a, f in envoy
-                                 if normalize_satici(a) in ANA_SATICILAR]
-                    if envoy_ana:
-                        ana = envoy_ana[0]
-
-                if ana is not None:
-                    sonuclar.append(kayit(u, simdi, ana[1], "ok",
-                                          varyant=model, satici=ana[0]))
-                if digerler:
-                    sonuclar.append(kayit(u, simdi, min(digerler), "ok",
-                                          varyant=model, satici="diger satici"))
-                if ana is None and not digerler:
                     sonuclar.append(kayit(u, simdi, None, "fiyat_bulunamadi",
                                           varyant=model))
-                print(f"[trendyol] {model[:40]}: ana={ana if ana else '-'} "
-                      f"diger_min={min(digerler) if digerler else '-'} "
-                      f"[{kaynak}, satici_dom={dom_satici or '-'}]")
+                print(f"[trendyol-detay] {model[:40]}: {fiyat} "
+                      f"[{kaynak}, satici={satici or '-'}]")
             except Exception:
                 sonuclar.append(kayit(u, simdi, None, "baglanti_hatasi", varyant=model))
-                print(f"[trendyol] {model[:40]}: baglanti_hatasi")
+                print(f"[trendyol-detay] {model[:40]}: baglanti_hatasi")
             sayfa.close()
             time.sleep(random.uniform(2, 4))
+
         tarayici.close()
     return sonuclar
+
+
 # ---------------- SHOPIFY (popcorner) ve genel ----------------
 
 def shopify_dokum_al(alan_adi):
