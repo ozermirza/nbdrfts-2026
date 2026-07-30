@@ -152,7 +152,9 @@
           <th data-k="hacim">Hacim<span class="tutamac"></span></th>
           <th data-k="platform">Platform<span class="tutamac"></span></th>
           <th data-k="fiyat">Fiyat<span class="tutamac"></span></th>
-          <th data-k="degisim">Değişim / Detay<span class="tutamac"></span></th>
+          <th data-k="degisim">Değişim<span class="tutamac"></span></th>
+          <th>Değişim tarihi<span class="tutamac"></span></th>
+          <th>% İndirim<span class="tutamac"></span></th>
         </tr></thead>
         <tbody id="tabloGovde"></tbody>
       </table>
@@ -378,18 +380,26 @@ function panelCiz() {
 }
 
 function detaySatiri(d, g) {
-  let rozet = "";
+  let rozet = "", tarihH = "", yuzdeH = "—";
   const an = kisaTarih(degisimAni(d));
-  const anEk = an ? ` <span class="adet">· ${an}</span>` : "";
   if (d.kapandi) {
-    rozet = `<span class="rozet kapandi">indirim kapandı · ${kisaTarih(d.kapandi)}</span>`;
+    rozet = `<span class="rozet kapandi">indirim kapandı</span>`;
+    tarihH = kisaTarih(d.kapandi);
   } else if (d.yon === "dusus") {
-    rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
+    rozet = `<span class="rozet dusus">▼ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
+    tarihH = an || "";
   } else if (d.yon === "artis") {
-    rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
+    rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
+    tarihH = an || "";
   } else if (d.fiyat && g.fiyat && d.fiyat !== g.fiyat) {
     const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
-    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}${anEk}</span>`;
+    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
+    tarihH = an || "";
+  }
+  if (d.fiyat && g.fiyat && parseFloat(g.fiyat) > 0 && d.fiyat !== g.fiyat) {
+    const oran = (parseFloat(d.fiyat) - parseFloat(g.fiyat)) / parseFloat(g.fiyat) * 100;
+    yuzdeH = `<span class="${oran < 0 ? "dusus" : "artis"} rozet">${oran > 0 ? "+" : ""}%${Math.abs(oran).toFixed(0)}</span>`;
+    if (oran > 0) yuzdeH = yuzdeH.replace("%", "%");
   }
   const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
   const gBtn = `<button class="btnMini grafikBtn" data-kim="${encodeURIComponent(kimlik(d))}"
@@ -398,7 +408,9 @@ function detaySatiri(d, g) {
     <td>↳ model</td>
     <td colspan="3"><a href="${d.url}" target="_blank" style="color:inherit">${etiket(d)}</a>${saticiHtml}${gBtn}</td>
     <td class="fiyat"><a href="${d.url}" target="_blank">${d.fiyat ? tl(d.fiyat) : d.durum}</a></td>
-    <td>${rozet}</td></tr>`;
+    <td>${rozet}</td>
+    <td class="adet">${tarihH || "—"}</td>
+    <td>${yuzdeH}</td></tr>`;
 }
 
 function ciz() {
@@ -446,6 +458,7 @@ function ciz() {
       <td>${g.platform}</td>
       <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}</td>
       <td>${detayNotu}</td>
+      <td></td><td></td>
     </tr>`;
     detaylar.forEach(d => satirlar += detaySatiri(d, g));
     return satirlar;
