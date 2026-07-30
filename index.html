@@ -131,7 +131,6 @@
   <div class="ust">
     <h1>Fiyat Radarı</h1>
     <div>
-      <a class="btn" href="digersaticilar.html" style="text-decoration:none; margin-right:8px">Diğer satıcılar</a>
       <button class="btn" id="temaBtn">☀ Açık tema</button>
     </div>
   </div>
@@ -448,9 +447,7 @@ function ciz() {
     const acik = acikGruplar.has(g.anahtar);
     const fiyatH = g.fiyat
       ? `<a href="${g.url}" target="_blank">${tl(g.fiyat)}</a>`
-      : (g.digerUyeler.length
-          ? `<a href="digersaticilar.html" class="adet">sadece diğer satıcıda</a>`
-          : `<span class="hata">${g.durum}</span>`);
+      : `<span class="hata">${g.durum}</span>`;
     const detaylar = acik ? g.anaUyeler : g.istisnalar;
     const detayNotu = acik
       ? `<span class="adet">▾ tümü açık</span>`
