@@ -464,7 +464,11 @@ def trendyol_iscisi(urunler, simdi):
                 kartlar, son_url, uzunluk, iz = {}, "-", 0, 0
                 try:
                     sayfa.goto(url, timeout=60000, wait_until="domcontentloaded")
-                    sayfa.wait_for_timeout(4000)
+                    try:
+                        sayfa.wait_for_selector("a.product-card", timeout=15000)
+                    except Exception:
+                        pass
+                    sayfa.wait_for_timeout(1500)
                     sayfa.evaluate("window.scrollTo(0, 3000)")
                     sayfa.wait_for_timeout(2500)
                     icerik = sayfa.content()
