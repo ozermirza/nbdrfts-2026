@@ -34,8 +34,8 @@ ANA_SATICILAR = {"popcorner", "sipnjoy"}
 #   satici : fiyatlar.csv'ye yazilacak satici adi
 #   taban  : magaza/liste sayfasinin adresi (pi= parametresi OLMADAN)
 MAGAZALAR = [
-    {"ad": "PopCorner-Trixie", "satici": "Pop Corner",
-     "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
+#    {"ad": "PopCorner-Trixie", "satici": "Pop Corner",
+#     "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
     {"ad": "SipnJoy", "satici": "SipnJoy",
      "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
 ]
@@ -479,9 +479,6 @@ def trendyol_iscisi(urunler, simdi):
                 except Exception as h:
                     print(f"    (debug) HATA: {h}")
                 sayfa.close()
-                if not kartlar:
-                    print(f"    (debug) istenen={url[:80]}")
-                    print(f"    (debug) varilan={son_url[:80]} boyut={uzunluk} kart_izi={iz}")
 
                 yeni = 0
                 for n, f in kartlar.items():
