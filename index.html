@@ -252,6 +252,7 @@ async function baslat() {
   const anaTurlar = [...new Set(kayitlar.filter(k => k.platform !== "Hepsiburada")
                                         .map(k => k.tarih))].sort();
   kayitlar.forEach(k => {
+    k.hamTarih = k.tarih;
     if (k.platform === "Hepsiburada" && !anaTurlar.includes(k.tarih)) {
       const uygun = anaTurlar.filter(t => t <= k.tarih);
       if (uygun.length) k.tarih = uygun[uygun.length - 1];
@@ -285,7 +286,17 @@ async function baslat() {
   });
   grupGecmis.forEach(l => l.sort((a, b) => a.tarih.localeCompare(b.tarih)));
 
-  const son = kayitlar.filter(k => k.tarih === sonTur);
+  const sonHam = kayitlar.filter(k => k.tarih === sonTur);
+  const enIyi = new Map();
+  sonHam.forEach(k => {
+    const a = kimlik(k);
+    const e = enIyi.get(a);
+    if (!e) { enIyi.set(a, k); return; }
+    const kF = !!k.fiyat, eF = !!e.fiyat;
+    if (kF && !eF) enIyi.set(a, k);
+    else if (kF === eF && (k.hamTarih || "") > (e.hamTarih || "")) enIyi.set(a, k);
+  });
+  const son = [...enIyi.values()];
   const onceki = new Map(kayitlar.filter(k => k.tarih === oncekiTur)
                                  .map(k => [kimlik(k), k]));
   son.forEach(k => {
