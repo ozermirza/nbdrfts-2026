@@ -68,7 +68,6 @@
   th:hover { color: var(--vurgu); }
   th .tutamac { position: absolute; right: 0; top: 0; bottom: 0; width: 6px;
                 cursor: col-resize; }
-  /* Sutun genislikleri: Fiyat genis, Degisim tarihi ve %Indirim dar */
   th:nth-child(1) { width: 13%; }
   th:nth-child(2) { width: 15%; }
   th:nth-child(3) { width: 9%; }
@@ -96,7 +95,6 @@
                   color: var(--soluk); border-radius: 5px; padding: 0 6px;
                   font-size: 11px; margin-left: 6px; }
 
-  /* Grafik penceresi */
   .modalArka { position: fixed; inset: 0; background: rgba(0,0,0,.55);
                display: none; align-items: center; justify-content: center;
                z-index: 50; }
@@ -130,9 +128,7 @@
 <body>
   <div class="ust">
     <h1>Fiyat Radarı</h1>
-    <div>
-      <button class="btn" id="temaBtn">☀ Açık tema</button>
-    </div>
+    <button class="btn" id="temaBtn">☀ Açık tema</button>
   </div>
   <div class="alt" id="sonGuncelleme">Veri yükleniyor...</div>
 
@@ -215,8 +211,8 @@ const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür":
 let gruplar = [], siralama = { k: null, yon: 1 };
 let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
 let acikGruplar = new Set();
-let gecmis = new Map();        // kimlik -> [{tarih, fiyat}]
-let grupGecmis = new Map();    // grupKimlik -> [{tarih, fiyat(mod)}]
+let gecmis = new Map();
+let grupGecmis = new Map();
 let sonTurZamani = 0;
 
 const aktif = (b, d) => durumlar[b][d] !== false;
@@ -247,10 +243,12 @@ async function baslat() {
   const kayitlar = csvOku(await (await fetch("fiyatlar.csv?" + Date.now())).text());
   try {
     const hb = await fetch("hb_fiyatlar.csv?" + Date.now());
-    if (hb.ok) kayitlar.push(...csvOku(await hb.text()));
+    if (hb.ok) {
+      const metin = await hb.text();
+      if (metin.trim().split("\n").length > 1) kayitlar.push(...csvOku(metin));
+    }
   } catch {}
-  const turlar = [...new Set(kayitlar.map(k => k.tarih))].sort();
-  // HB kayitlarini en yakin (kendisinden onceki) ana tura hizala
+
   const anaTurlar = [...new Set(kayitlar.filter(k => k.platform !== "Hepsiburada")
                                         .map(k => k.tarih))].sort();
   kayitlar.forEach(k => {
@@ -259,6 +257,8 @@ async function baslat() {
       if (uygun.length) k.tarih = uygun[uygun.length - 1];
     }
   });
+
+  const turlar = [...new Set(kayitlar.map(k => k.tarih))].sort();
   const sonTur = turlar.at(-1), oncekiTur = turlar.at(-2) || null;
   sonTurZamani = zaman(sonTur);
 
@@ -269,8 +269,7 @@ async function baslat() {
       gecmis.get(a).push({ tarih: k.tarih, fiyat: k.fiyat });
     });
 
-  // Grup ortak fiyat (mod) gecmisi: her tur icin ayri hesapla
-  const turGrup = new Map(); // grupKimlik|tarih -> {fiyat: adet}
+  const turGrup = new Map();
   kayitlar.forEach(k => {
     if (!k.fiyat || digerMi(k)) return;
     const a = grupKimlik(k) + "@" + k.tarih;
@@ -492,7 +491,6 @@ function ciz() {
                b.dataset.ad)));
 }
 
-// ---------------- GRAFIK ----------------
 function grafikAc(kim, grupAnahtari, baslik) {
   const urunH = kim ? (gecmis.get(kim) || []) : [];
   const grupH = grupGecmis.get(grupAnahtari) || [];
@@ -527,7 +525,6 @@ function grafikAc(kim, grupAnahtari, baslik) {
     : M.sol + (t - t0) / (t1 - t0) * (W - M.sol - M.sag);
   const py = f => M.ust + (f1 - f) / (f1 - f0) * (H - M.ust - M.alt);
 
-  // yatay izgara + fiyat etiketleri
   x.font = "11px sans-serif";
   x.textAlign = "right"; x.textBaseline = "middle";
   for (let i = 0; i <= 4; i++) {
@@ -538,7 +535,6 @@ function grafikAc(kim, grupAnahtari, baslik) {
     x.fillStyle = rSoluk;
     x.fillText(Math.round(f).toLocaleString("tr-TR"), M.sol - 8, y);
   }
-  // x ekseni tarih etiketleri
   x.textAlign = "center"; x.textBaseline = "top";
   x.fillStyle = rSoluk;
   x.fillText(kisaTarih(new Date(t0).toISOString().slice(0,16).replace("T"," ")), M.sol + 30, H - M.alt + 8);
@@ -554,7 +550,6 @@ function grafikAc(kim, grupAnahtari, baslik) {
       if (i === 0) x.moveTo(X, Y);
       else { x.lineTo(X, py(parseFloat(liste[i-1].fiyat))); x.lineTo(X, Y); }
     });
-    // son noktadan grafigin sagina uzat
     const sonN = liste[liste.length - 1];
     x.lineTo(W - M.sag, py(parseFloat(sonN.fiyat)));
     x.stroke();
@@ -564,7 +559,6 @@ function grafikAc(kim, grupAnahtari, baslik) {
   seriCiz(grupH, rSoluk, true, 1.5);
   seriCiz(urunH, rVurgu, false, 2.5);
 
-  // urun son fiyat noktasi + etiketi
   const kaynak = urunH.length ? urunH : grupH;
   const sonN = kaynak[kaynak.length - 1];
   const sy = py(parseFloat(sonN.fiyat));
