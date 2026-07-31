@@ -245,7 +245,20 @@ function kapanmaAni(k, grupFiyati) {
 
 async function baslat() {
   const kayitlar = csvOku(await (await fetch("fiyatlar.csv?" + Date.now())).text());
+  try {
+    const hb = await fetch("hb_fiyatlar.csv?" + Date.now());
+    if (hb.ok) kayitlar.push(...csvOku(await hb.text()));
+  } catch {}
   const turlar = [...new Set(kayitlar.map(k => k.tarih))].sort();
+  // HB kayitlarini en yakin (kendisinden onceki) ana tura hizala
+  const anaTurlar = [...new Set(kayitlar.filter(k => k.platform !== "Hepsiburada")
+                                        .map(k => k.tarih))].sort();
+  kayitlar.forEach(k => {
+    if (k.platform === "Hepsiburada" && !anaTurlar.includes(k.tarih)) {
+      const uygun = anaTurlar.filter(t => t <= k.tarih);
+      if (uygun.length) k.tarih = uygun[uygun.length - 1];
+    }
+  });
   const sonTur = turlar.at(-1), oncekiTur = turlar.at(-2) || null;
   sonTurZamani = zaman(sonTur);
 
