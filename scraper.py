@@ -544,7 +544,6 @@ def trendyol_iscisi(urunler, simdi):
         tarayici.close()
     return sonuclar
 
-
 # ---------------- SHOPIFY (popcorner) ve genel ----------------
 
 def shopify_dokum_al(alan_adi):
