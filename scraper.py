@@ -35,7 +35,7 @@ ANA_SATICILAR = {"popcorner", "sipnjoy"}
 #   taban  : magaza/liste sayfasinin adresi (pi= parametresi OLMADAN)
 MAGAZALAR = [
     {"ad": "PopCorner-Trixie", "satici": "Pop Corner",
-     "taban": "https://www.trendyol.com/sr?wb=103069&lc=103714%2C1193&os=1&mid=849084"},
+     "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
     {"ad": "SipnJoy", "satici": "SipnJoy",
      "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
 ]
