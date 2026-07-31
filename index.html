@@ -201,10 +201,38 @@ function linktenModel(url) {
     return parca.replace(/-/g, " ").replace(/\s+p \d+$/, "");
   } catch { return ""; }
 }
+  // Kisa ad sozlugu: urun adinda soldaki kalip gecerse sadece sagdaki gosterilir.
+// Yeni model ciktikca buraya satir eklemen yeterli. Cok kelimeliler ustte dursun.
+const KISA_ADLAR = [
+  ["fairy sparkle", "Fairy Sparkle"], ["ocean whisper", "Ocean Whisper"],
+  ["firefighter buddy", "Firefighter Buddy"], ["swan harmony", "Swan Harmony"],
+  ["bee honey", "Bee Honey"], ["jungle jam", "Jungle Jam"],
+  ["fly pal", "Fly Pal"], ["space explorer", "Space Explorer"],
+  ["koyu pembe", "Koyu Pembe"], ["koyu mor", "Koyu Mor"],
+  ["mermaid", "Mermaid"], ["dino", "Dino"], ["roads", "Roads"],
+  ["mor", "Mor"],
+];
+
+function kisaAd(ham) {
+  const kucuk = " " + ham.toLowerCase() + " ";
+  for (const [ara, goster] of KISA_ADLAR) {
+    if (kucuk.includes(ara)) return goster;
+  }
+  // "mr / mrs / miss X" kalibi: Trixie modelleri icin otomatik kisaltma
+  const m = kucuk.match(/\b(mr|mrs|miss)\.?\s+([a-zçğıöşü]+)/);
+  if (m) {
+    const bas = s => s.charAt(0).toUpperCase() + s.slice(1);
+    return bas(m[1]) + ". " + bas(m[2]);
+  }
+  // eslesme yoksa: ilk 5 kelime
+  const kelimeler = ham.split(/\s+/);
+  return kelimeler.length > 5 ? kelimeler.slice(0, 5).join(" ") + "…" : ham;
+}
 function etiket(k) {
   const v = (k.varyant || "").trim();
-  if (v && v.toLowerCase() !== "default title") return v;
-  return linktenModel(k.url) || "(model bilinmiyor)";
+  const ham = (v && v.toLowerCase() !== "default title")
+    ? v : (linktenModel(k.url) || "(model bilinmiyor)");
+  return kisaAd(ham);
 }
 
 const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür": "tur" };
