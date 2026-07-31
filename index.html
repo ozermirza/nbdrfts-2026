@@ -204,20 +204,34 @@ function linktenModel(url) {
   // Kisa ad sozlugu: urun adinda soldaki kalip gecerse sadece sagdaki gosterilir.
 // Yeni model ciktikca buraya satir eklemen yeterli. Cok kelimeliler ustte dursun.
 const KISA_ADLAR = [
-  ["fairy sparkle", "Fairy Sparkle"], ["ocean whisper", "Ocean Whisper"],
-  ["firefighter buddy", "Firefighter Buddy"], ["swan harmony", "Swan Harmony"],
-  ["bee honey", "Bee Honey"], ["jungle jam", "Jungle Jam"],
-  ["fly pal", "Fly Pal"], ["space explorer", "Space Explorer"],
+  ["fairy sparkle", "Fairy Sparkle"], ["mermaid dream", "Mermaid Dream"],
+  ["ocean whisper", "Ocean Whisper"], ["firefighter buddy", "Firefighter Buddy"],
+  ["swan harmony", "Swan Harmony"], ["bee honey", "Bee Honey"],
+  ["jungle jam", "Jungle Jam"], ["fly pal", "Fly Pal"],
+  ["space explorer", "Space Explorer"],
   ["koyu pembe", "Koyu Pembe"], ["koyu mor", "Koyu Mor"],
+  ["koyu mavi", "Koyu Mavi"],
   ["mermaid", "Mermaid"], ["dino", "Dino"], ["roads", "Roads"],
-  ["mor", "Mor"],
+  ["pembe", "Pembe"], ["mavi", "Mavi"], ["mor", "Mor"],
 ];
 
 function kisaAd(ham) {
   const kucuk = " " + ham.toLowerCase() + " ";
+  let enIyi = null;
   for (const [ara, goster] of KISA_ADLAR) {
-    if (kucuk.includes(ara)) return goster;
+    if (kucuk.includes(ara) && (!enIyi || ara.length > enIyi[0].length)) {
+      enIyi = [ara, goster];
+    }
   }
+  if (enIyi) return enIyi[1];
+  const m = kucuk.match(/\b(mr|mrs|miss)\.?\s+([a-zçğıöşü]+)/);
+  if (m) {
+    const bas = s => s.charAt(0).toUpperCase() + s.slice(1);
+    return bas(m[1]) + ". " + bas(m[2]);
+  }
+  const kelimeler = ham.split(/\s+/);
+  return kelimeler.length > 5 ? kelimeler.slice(0, 5).join(" ") + "…" : ham;
+}
   // "mr / mrs / miss X" kalibi: Trixie modelleri icin otomatik kisaltma
   const m = kucuk.match(/\b(mr|mrs|miss)\.?\s+([a-zçğıöşü]+)/);
   if (m) {
