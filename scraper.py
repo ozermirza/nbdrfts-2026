@@ -461,16 +461,23 @@ def trendyol_iscisi(urunler, simdi):
                         pass
                 sayfa.on("response", topla)
 
-                kartlar = {}
+                kartlar, son_url, uzunluk, iz = {}, "-", 0, 0
                 try:
                     sayfa.goto(url, timeout=60000, wait_until="domcontentloaded")
                     sayfa.wait_for_timeout(4000)
                     sayfa.evaluate("window.scrollTo(0, 3000)")
                     sayfa.wait_for_timeout(2500)
-                    kartlar = kart_fiyatlari(sayfa.content())
-                except Exception:
-                    pass
+                    icerik = sayfa.content()
+                    son_url = sayfa.url
+                    uzunluk = len(icerik)
+                    iz = icerik.count("product-card")
+                    kartlar = kart_fiyatlari(icerik)
+                except Exception as h:
+                    print(f"    (debug) HATA: {h}")
                 sayfa.close()
+                if not kartlar:
+                    print(f"    (debug) istenen={url[:80]}")
+                    print(f"    (debug) varilan={son_url[:80]} boyut={uzunluk} kart_izi={iz}")
 
                 yeni = 0
                 for n, f in kartlar.items():
