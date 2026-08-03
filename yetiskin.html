@@ -123,8 +123,10 @@
     td, th { padding: 8px 10px; font-size: 13px; }
     canvas { height: 220px; }
   }
-  .navSatir { display: flex; gap: 8px; align-items: center; margin: 14px 0 0; }
-  .navSatir .btn { text-decoration: none; }
+  .navSatir { display: flex; gap: 16px; align-items: center; margin: 16px 0 14px; }
+  .navGrup { display: flex; gap: 8px; width: 217px; flex: none; }
+  .navGrup .btn { flex: 1; text-align: center; text-decoration: none; }
+  .navSatir > #sifirlaBtn { margin: 0; }
   .aktifSayfa { border-color: var(--vurgu); color: var(--vurgu); font-weight: 600; }
 </style>
 </head>
@@ -144,9 +146,11 @@
   </div>
 
   <div class="navSatir">
-    <a class="btn " href="index.html">Çocuk ürünleri</a>
-    <a class="btn aktifSayfa" href="yetiskin.html">Yetişkin ürünleri</a>
-    <button class="btn" id="sifirlaBtn" style="margin-left:auto">↺ Sayfayı sıfırla</button>
+    <div class="navGrup">
+      <a class="btn" href="index.html">Çocuk ürünleri</a>
+      <a class="btn aktifSayfa" href="yetiskin.html">Yetişkin ürünleri</a>
+    </div>
+    <button class="btn" id="sifirlaBtn">↺ Sayfayı sıfırla</button>
   </div>
 
   <div class="duzen">
