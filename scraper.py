@@ -47,7 +47,7 @@ KESIF = [
 MAGAZALAR = [
     # {"ad": "PopCorner-Trixie", "satici": "Pop Corner",
     #  "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
-    {"ad": "SipnJoy", "satici": "SipnJoy",
+    {"ad": "SipnJoy", "marka": "Sipnjoy", "satici": "SipnJoy",
      "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
 ]
 
@@ -265,11 +265,16 @@ def _sayi_cek(d, alanlar):
     return None
 
 
-def kart_fiyatlari(icerik):
+def kart_bilgileri(icerik):
+    """Magaza sayfasindan {urun_no: (fiyat, ad, url)} cikarir."""
     sonuc = {}
     parcalar = re.split(r'<a id="(\d+)" class="product-card"', icerik)
     for i in range(1, len(parcalar) - 1, 2):
         no, govde = parcalar[i], parcalar[i + 1]
+        m = re.search(r'href="(/[^"]+-p-' + no + r'[^"]*)"', govde)
+        url = ("https://www.trendyol.com" + m.group(1).split("?")[0]) if m else ""
+        m = re.search(r'class="product-name[^"]*"[^>]*>([^<]{3,120})<', govde)
+        ad = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
         guncel = None
         for m in re.finditer(r'class="([^"]*price[^"]*)"[^>]*>\s*([\d.,]+)\s*TL', govde):
             sinif, ham = m.group(1), m.group(2)
@@ -282,9 +287,8 @@ def kart_fiyatlari(icerik):
             if guncel is None:
                 guncel = deger
         if guncel is not None:
-            sonuc[no] = guncel
+            sonuc[no] = (guncel, ad, url)
     return sonuc
-
 
 def cv_fiyat(p):
     if not isinstance(p, dict):
@@ -400,6 +404,7 @@ def eski_kayit(u, simdi, fiyat, durum, varyant=None, satici=""):
 def trendyol_iscisi(urunler, simdi):
     from playwright.sync_api import sync_playwright
     sonuclar = []
+    haric_kume = haric_listesi()
 
     no_map = {}
     for u in urunler:
@@ -453,14 +458,24 @@ def trendyol_iscisi(urunler, simdi):
                     sayfa.wait_for_timeout(1500)
                     sayfa.evaluate("window.scrollTo(0, 3000)")
                     sayfa.wait_for_timeout(2500)
-                    kartlar = kart_fiyatlari(sayfa.content())
+                    kartlar = kart_bilgileri(sayfa.content())
                 except Exception as h:
                     print(f"    HATA: {h}")
                 sayfa.close()
 
                 yeni = 0
-                for n, f in kartlar.items():
-                    yeni += isle(n, f, mag["satici"])
+                for n, (f, ad, curl) in kartlar.items():
+                    if n in no_map:
+                        yeni += isle(n, f, mag["satici"])
+                    elif (f is not None and f >= TABAN_FIYAT and curl
+                          and curl not in haric_kume and uygun_mu(ad or "")):
+                        seri, hacim, tur = kunye(mag.get("marka", ""), ad)
+                        sonuclar.append(kayit_yap(simdi, mag.get("marka", ""),
+                                                  seri, ad, hacim, tur,
+                                                  "Trendyol", f, "ok", curl,
+                                                  mag["satici"]))
+                        islenen.add(n)
+                        yeni += 1
                 for govde in cv_cevaplar:
                     try:
                         veri = json.loads(govde)
