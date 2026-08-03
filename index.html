@@ -271,6 +271,20 @@ function kapanmaAni(k, grupFiyati) {
   return (sonTurZamani - zaman(an)) <= 48 * 3600 * 1000 ? an : null;
 }
 
+function kategoriZam(gk, mod) {
+  if (!mod) return null;
+  const h = grupGecmis.get(gk);
+  if (!h || h.length < 2) return null;
+  const son = h[h.length - 1].fiyat;
+  let i = h.length - 1;
+  while (i >= 0 && h[i].fiyat === son) i--;
+  if (i < 0) return null;
+  if (parseFloat(h[i].fiyat) >= parseFloat(son)) return null;
+  const an = h[i + 1].tarih;
+  if ((sonTurZamani - zaman(an)) > 48 * 3600 * 1000) return null;
+  return { an, eski: h[i].fiyat, yeni: son };
+}
+
 async function baslat() {
   const kayitlar = csvOku(await (await fetch("fiyatlar.csv?" + Date.now())).text());
   try {
@@ -362,6 +376,7 @@ async function baslat() {
       marka: ilk.marka, seri_adi: ilk.seri_adi, hacim: ilk.hacim,
       platform: ilk.platform, tur: (ilk.kategori2 || "").toLowerCase(),
       fiyat: mod, adet: anaUyeler.length,
+      kategoriZam: kategoriZam(anahtar, mod),
       durum: fiyatli.length ? "ok" : ilk.durum,
       url: ilk.url, anaUyeler, digerUyeler, istisnalar,
       degisenSayi: uyeler.filter(u => u.yon).length
@@ -480,7 +495,7 @@ function ciz() {
 
   let liste = gruplar.filter(g =>
     Object.values(BOYUTLAR).every(b => aktif(b, g[b])) &&
-    (!sadeceDegisen || g.degisenSayi > 0 || g.istisnalar.length > 0) &&
+    (!sadeceDegisen || g.degisenSayi > 0 || g.istisnalar.length > 0 || g.kategoriZam) &&
     (!ara || (g.marka + " " + g.seri_adi + " " +
               g.anaUyeler.concat(g.digerUyeler).map(etiket).join(" "))
               .toLowerCase().includes(ara))
@@ -510,13 +525,16 @@ function ciz() {
     const grupGBtn = `<button class="btnMini grafikBtn" data-kim=""
       data-grup="${encodeURIComponent(g.anahtar)}"
       data-ad="${(g.marka + " " + g.seri_adi + " " + g.hacim + " grup fiyatı").replace(/"/g, "&quot;")}">📈</button>`;
+    const zamH = g.kategoriZam
+      ? ` <span class="rozet artis">kategori fiyat artışı ▲ ${tl(g.kategoriZam.eski)} → ${tl(g.kategoriZam.yeni)}</span>`
+      : "";
     let satirlar = `<tr>
       <td><button class="acButon" data-g="${g.anahtar}">${acik ? "▾" : "▸"}</button>${g.marka}</td>
       <td>${g.seri_adi}</td><td>${g.hacim}</td>
       <td>${g.platform}</td>
-      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}</td>
+      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}${zamH}</td>
       <td>${detayNotu}</td>
-      <td></td>
+      <td>${g.kategoriZam ? kisaTarih(g.kategoriZam.an) : ""}</td>
     </tr>`;
     detaylar.forEach(d => satirlar += detaySatiri(d, g));
     return satirlar;
