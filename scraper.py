@@ -182,6 +182,26 @@ def shopify_kesif(k, simdi, haric, gorulenler):
 
 # ---------------- KESIF: NEXT_DATA (sipnjoylife) ----------------
 
+def slug_bul(d):
+    """Urun kaydinin derinliklerinde link/slug arar (metaData, translations...)."""
+    for kap_adi in ("metaData", "translations", "seo"):
+        kap = d.get(kap_adi)
+        if kap is None:
+            continue
+        for ic in gez(kap):
+            for alan in ("slug", "seoUrl", "url", "handle", "path"):
+                v = ic.get(alan)
+                if isinstance(v, str) and v.strip():
+                    return v.strip().strip("/").split("/")[-1]
+    return None
+
+
+def slugla(metin):
+    harfler = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosucgiosu")
+    metin = metin.translate(harfler).lower()
+    return re.sub(r"[^a-z0-9]+", "-", metin).strip("-")
+
+
 def nextdata_kesif(k, simdi, haric, gorulenler):
     sonuclar = []
     try:
@@ -205,10 +225,7 @@ def nextdata_kesif(k, simdi, haric, gorulenler):
         if not uygun_mu(ad):
             continue
         seri, hacim, tur = kunye(k["marka"], ad)
-        slug = d.get("url") or d.get("slug") or ""
-        slug = str(slug).strip("/").split("/")[-1]
-        if not slug:
-            continue
+        slug = slug_bul(d) or slugla(ad)
         taban_url = f"{k['taban']}/{slug}"
         for v in d["variants"]:
             if not isinstance(v, dict):
@@ -235,7 +252,6 @@ def nextdata_kesif(k, simdi, haric, gorulenler):
                                       fiyat, "ok", vurl, k["satici"]))
     print(f"[kesif:{k['platform']}] {len(sonuclar)} kayit kesfedildi")
     return sonuclar
-
 
 # ---------------- TRENDYOL (urunler.csv uzerinden, degisiklik yok) ----------------
 
