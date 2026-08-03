@@ -123,6 +123,18 @@ def haric_listesi():
         return set()
 
 
+def yetiskin_listesi():
+    """yetiskin.csv: linki yazilan urun, adi ne olursa olsun yetiskin
+    dosyasina zorlanir (? sonrasi atilarak karsilastirilir)."""
+    try:
+        with open("yetiskin.csv", newline="", encoding="utf-8") as f:
+            return {(s.get("url") or "").strip().split("?")[0]
+                    for s in csv.DictReader(f)
+                    if (s.get("url") or "").strip()}
+    except FileNotFoundError:
+        return set()
+
+
 def onceki_kesif_urunleri(dosya):
     try:
         with open(dosya, newline="", encoding="utf-8") as f:
@@ -630,9 +642,14 @@ def main():
             tum.extend(is_.result())
 
     # kayit siniflarina gore ayir
+    # kayit siniflarina gore ayir (yetiskin.csv istisnalari uygulanir)
+    yetiskin_zorla = yetiskin_listesi()
     ana_kayitlar, yetiskin_kayitlar = [], []
     for kayit in tum:
         sinif = kayit.pop("_sinif", "ana")
+        u = (kayit.get("url") or "").split("?")[0]
+        if any(u.startswith(p) for p in yetiskin_zorla):
+            sinif = "yetiskin"
         (yetiskin_kayitlar if sinif == "yetiskin" else ana_kayitlar).append(kayit)
 
     # bu turda gorunmeyenler -> satista_degil (her dosya kendi gecmisine gore)
