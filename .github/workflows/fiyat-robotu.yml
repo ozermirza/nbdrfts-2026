@@ -27,5 +27,5 @@ jobs:
           git config user.email "robot@users.noreply.github.com"
           git add fiyatlar.csv
           git diff --cached --quiet || git commit -m "Otomatik fiyat guncellemesi"
-          git pull --rebase origin main
-          git push
+          git pull --rebase origin main || (sleep 20 && git pull --rebase origin main)
+          git push || (sleep 20 && git push)
