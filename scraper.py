@@ -27,6 +27,9 @@ SUTUNLAR = ["tarih", "marka", "seri_adi", "varyant", "kategori1", "hacim",
 
 # Markalarin resmi/ana saticilari (kucuk harf, bosluksuz).
 ANA_SATICILAR = {"popcorner", "sipnjoy"}
+# Bu tutarin altindaki fiyatlar hatali sayilir (kategori sayfasina yonlenme vb.)
+# Ileride ucuz markalar eklenirse bu esigi dusur.
+TABAN_FIYAT = 500
 
 # ---- TRENDYOL MAGAZALARI ----
 # Yeni marka eklerken buraya bir satir ekle:
@@ -427,7 +430,8 @@ def trendyol_iscisi(urunler, simdi):
     islenen = set()
 
     def isle(n, fiyat, satici, varyant_adi=None):
-        if n in no_map and n not in islenen and fiyat is not None:
+        if (n in no_map and n not in islenen and fiyat is not None
+                and fiyat >= TABAN_FIYAT):
             u = no_map[n]
             sonuclar.append(kayit(u, simdi, fiyat, "ok",
                                   varyant=varyant_adi or model_adi(u["url"]),
@@ -525,6 +529,15 @@ def trendyol_iscisi(urunler, simdi):
                     sayfa.close()
                     time.sleep(random.uniform(2, 4))
                     continue
+                no = urun_no(u["url"])
+                if no and no not in sayfa.url:
+                    sonuclar.append(kayit(u, simdi, None, "urun_bulunamadi",
+                                          varyant=model))
+                    print(f"[trendyol-detay] {model[:40]}: urun_bulunamadi "
+                          f"(baska sayfaya yonlendirildi)")
+                    sayfa.close()
+                    time.sleep(random.uniform(2, 4))
+                    continue
                 icerik = sayfa.content()
                 fiyat = trendyol_winner_fiyat(icerik)
                 kaynak = "winner"
@@ -534,6 +547,10 @@ def trendyol_iscisi(urunler, simdi):
                 if fiyat is None:
                     fiyat = trendyol_dom_fiyat(sayfa)
                     kaynak = "dom"
+                if fiyat is not None and fiyat < TABAN_FIYAT:
+                    print(f"[trendyol-detay] {model[:40]}: supheli fiyat "
+                          f"{fiyat} elendi (taban {TABAN_FIYAT})")
+                    fiyat = None
                 satici = dom_satici_bul(icerik)
                 if fiyat is not None:
                     sonuclar.append(kayit(u, simdi, fiyat, "ok",
