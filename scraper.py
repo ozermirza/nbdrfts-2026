@@ -5,8 +5,9 @@
 #     (product-name elemani cogu kartta kalkmisti)
 #   - Kesifte tekrar-sayma duzeltildi (ayni urun JSON'da defalarca geciyordu;
 #     510 kayit -> gercek sayi)
-#   - Yetiskin urun sinifi: tumbler/mug/kupa veya >=600 ml urunler
+#   - Yetiskin urun sinifi (tumbler/mug/kupa, SADECE isimden; hacim kullanilmaz)
 #     yetiskin_fiyatlar.csv dosyasina yazilir (sitede ayri sayfada gosterilecek)
+#   - satista_degil kayitlari artik her turda tekrarlanmiyor
 #   - hb_iscisi kaldirildi (403 kirliligi; HB'yi yerel robot tasiyor)
 
 import csv
@@ -37,10 +38,13 @@ ANA_SATICILAR = {"popcorner", "sipnjoy"}
 TABAN_FIYAT = 500   # bu tutarin alti hatali sayilir
 
 # ---- SINIFLANDIRMA AYARLARI ----
+# Kural sirasi: once HARIC (elenir) -> sonra YETISKIN (ayri dosya)
+# -> sonra DAHIL/SERI (ana dosya) -> hicbiri degilse takip edilmez.
+# Siniflandirma tamamen isim uzerindendir; ileride gerekirse marka bazli
+# kelime listelerine cevrilebilir.
 DAHIL_KELIMELER = ["matara", "termos", "suluk", "bottle", "şişe", "sise"]
 HARIC_KELIMELER = ["tritan", "yemek", "food", "beslenme", "mama"]
-YETISKIN_KELIMELER = ["tumbler", "mug", "kupa"]
-YETISKIN_HACIM = 600   # bu hacim ve uzeri (ml) yetiskin sayilir
+YETISKIN_KELIMELER = ["tumbler", "mug", "kupa", "yetişkin", "yetiskin"]
 SERILER = ["FlipSip", "SippyPals", "WideWonder", "SipSquad", "Lil'Straw",
            "Handlehug", "StrawBuddy"]
 
@@ -75,7 +79,8 @@ def hacim_ml(ad):
 
 def sinifla(ad):
     """Urun adina gore sinif: 'ana' (cocuk matara/termos),
-    'yetiskin' (tumbler/mug/buyuk hacim) veya None (takip edilmez)."""
+    'yetiskin' (tumbler/mug/kupa) veya None (takip edilmez).
+    Kural tamamen isim uzerinden isler; hacim siniflandirmada kullanilmaz."""
     a = kucuk(ad)
     if any(h in a for h in HARIC_KELIMELER):
         return None
@@ -84,9 +89,7 @@ def sinifla(ad):
     uygun = (any(d in a for d in DAHIL_KELIMELER)
              or any(kucuk(s).replace("'", "") in a.replace("'", "")
                     for s in SERILER))
-    if not uygun:
-        return None
-    return "yetiskin" if hacim_ml(ad) >= YETISKIN_HACIM else "ana"
+    return "ana" if uygun else None
 
 
 def kunye(marka, ad):
