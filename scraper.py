@@ -32,7 +32,7 @@ TABAN_FIYAT = 500   # bu tutarin alti hatali sayilir
 # Urun adinda bunlardan biri gecmeli (kucuk harf karsilastirma):
 DAHIL_KELIMELER = ["matara", "termos", "suluk", "bottle", "şişe", "sise"]
 # Adinda bunlar gecen urunler otomatik elenir:
-HARIC_KELIMELER = ["tritan"]
+HARIC_KELIMELER = ["tritan", "mama"]
 # Seri adi tespiti icin bilinen seriler (bulunamazsa Matara/Termos yazilir):
 SERILER = ["FlipSip", "SippyPals", "WideWonder", "SipSquad", "Lil'Straw"]
 
