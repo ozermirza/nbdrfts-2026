@@ -128,6 +128,7 @@
 <body>
   <div class="ust">
     <h1>Fiyat Radarı</h1>
+    <button class="btn" id="sifirlaBtn">↺ Sayfayı sıfırla</button>
     <button class="btn" id="temaBtn">☀ Açık tema</button>
   </div>
   <div class="alt" id="sonGuncelleme">Veri yükleniyor...</div>
@@ -383,21 +384,8 @@ async function baslat() {
     };
   });
 
-  let indirimli = 0, grupUstu = 0;
-  gruplar.forEach(g => g.anaUyeler.forEach(u => {
-    if (!u.fiyat || !g.fiyat) return;
-    const f = parseFloat(u.fiyat), m = parseFloat(g.fiyat);
-    if (f < m || u.yon === "dusus") indirimli++;
-    else if (f > m || u.yon === "artis") grupUstu++;
-  }));
-
   document.getElementById("sonGuncelleme").textContent =
     "Son güncelleme: " + sonTur + " · robot saat başı tarar (00-06 hariç)";
-  document.getElementById("kGrup").textContent = gruplar.length;
-  document.getElementById("kKayit").textContent = son.length;
-  document.getElementById("kDusen").textContent = indirimli;
-  document.getElementById("kArtan").textContent = grupUstu;
-  document.getElementById("kHata").textContent = son.filter(k => k.durum !== "ok").length;
 
   document.getElementById("fAra").addEventListener("input", ciz);
   document.getElementById("fDegisen").addEventListener("input", ciz);
@@ -407,6 +395,14 @@ async function baslat() {
       siralama.yon = siralama.k === th.dataset.k ? -siralama.yon : 1;
       siralama.k = th.dataset.k; ciz();
     }));
+  document.getElementById("sifirlaBtn").addEventListener("click", () => {
+    acikGruplar.clear();
+    durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
+    document.getElementById("fAra").value = "";
+    document.getElementById("fDegisen").checked = false;
+    siralama = { k: null, yon: 1 };
+    ciz();
+  });
   document.getElementById("modalKapat").addEventListener("click", modalKapat);
   document.getElementById("modalArka").addEventListener("click", e => {
     if (e.target.id === "modalArka") modalKapat();
@@ -500,6 +496,25 @@ function ciz() {
               g.anaUyeler.concat(g.digerUyeler).map(etiket).join(" "))
               .toLowerCase().includes(ara))
   );
+
+  document.getElementById("kGrup").textContent = liste.length;
+  let kayitSay = 0, indirimli = 0, grupUstu = 0, hatali = 0;
+  liste.forEach(g => {
+    const uyeler = g.anaUyeler.concat(g.digerUyeler);
+    kayitSay += uyeler.length;
+    hatali += uyeler.filter(u => u.durum !== "ok").length;
+    g.anaUyeler.forEach(u => {
+      if (!u.fiyat || !g.fiyat) return;
+      const f = parseFloat(u.fiyat), m = parseFloat(g.fiyat);
+      if (f < m || u.yon === "dusus") indirimli++;
+      else if (f > m || u.yon === "artis") grupUstu++;
+    });
+  });
+  document.getElementById("kKayit").textContent = kayitSay;
+  document.getElementById("kDusen").textContent = indirimli;
+  document.getElementById("kArtan").textContent = grupUstu;
+  document.getElementById("kHata").textContent = hatali;
+
   if (siralama.k) {
     liste = [...liste].sort((a, b) => {
       if (siralama.k === "degisim")
