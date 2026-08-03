@@ -78,19 +78,19 @@ def hacim_ml(ad):
 
 
 def sinifla(ad):
-    """Urun adina gore sinif: 'ana' (cocuk matara/termos),
+    """Urun adina gore sinif: 'ana' (cocuk urunleri),
     'yetiskin' (tumbler/mug/kupa) veya None (takip edilmez).
-    Kural tamamen isim uzerinden isler; hacim siniflandirmada kullanilmaz."""
+    Kural sirasi: HARIC -> SERI (bilinen cocuk serisi her zaman 'ana',
+    adinda tumbler gecse bile) -> YETISKIN kelimeleri -> DAHIL kelimeleri.
+    Tamamen isim uzerinden isler; hacim kullanilmaz."""
     a = kucuk(ad)
     if any(h in a for h in HARIC_KELIMELER):
         return None
+    if any(kucuk(s).replace("'", "") in a.replace("'", "") for s in SERILER):
+        return "ana"
     if any(y in a for y in YETISKIN_KELIMELER):
         return "yetiskin"
-    uygun = (any(d in a for d in DAHIL_KELIMELER)
-             or any(kucuk(s).replace("'", "") in a.replace("'", "")
-                    for s in SERILER))
-    return "ana" if uygun else None
-
+    return "ana" if any(d in a for d in DAHIL_KELIMELER) else None
 
 def kunye(marka, ad):
     a = kucuk(ad)
