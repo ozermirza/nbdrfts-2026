@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 12)
-# YENI: OTOMATIK KESIF (Faz 1) - popcorner ve sipnjoylife icin urunler.csv
-# gerekmez; magazanin tamami taranir, uygun urunler kendiliginden takibe girer,
-# kaybolanlar 'satista_degil' olarak isaretlenir, haric.csv ile dislama yapilir.
-# Trendyol ve Hepsiburada: eskisi gibi urunler.csv uzerinden.
+# FIYAT RADARI - scraper.py (surum 13)
+# Faz 1: popcorner + sipnjoylife otomatik kesif (katalogdan, urunler.csv'siz)
+# Faz 2: Trendyol-SipnJoy magazasinda listede olmayan urunleri otomatik takibe al
+#        (kart adi okunamazsa ad linkten uretilir)
+# Trendyol-Trixie: detay sayfasindan (magazasi robota kapali)
+# Hepsiburada: 403 (yerel robot tasiyor)
 
 import csv
 import json
@@ -29,11 +30,8 @@ ANA_SATICILAR = {"popcorner", "sipnjoy"}
 TABAN_FIYAT = 500   # bu tutarin alti hatali sayilir
 
 # ---- OTOMATIK KESIF AYARLARI ----
-# Urun adinda bunlardan biri gecmeli (kucuk harf karsilastirma):
 DAHIL_KELIMELER = ["matara", "termos", "suluk", "bottle", "şişe", "sise"]
-# Adinda bunlar gecen urunler otomatik elenir:
-HARIC_KELIMELER = ["tritan", "mama", "yemek", "food", "besleme", "beslenme"]
-# Seri adi tespiti icin bilinen seriler (bulunamazsa Matara/Termos yazilir):
+HARIC_KELIMELER = ["tritan", "yemek", "food", "beslenme", "mama"]
 SERILER = ["FlipSip", "SippyPals", "WideWonder", "SipSquad", "Lil'Straw"]
 
 KESIF = [
@@ -43,9 +41,9 @@ KESIF = [
      "taban": "https://www.sipnjoylife.com", "satici": "sipnjoy"},
 ]
 
-# ---- TRENDYOL MAGAZALARI (buy-box hizlandirici) ----
+# ---- TRENDYOL MAGAZALARI ----
 MAGAZALAR = [
-    # {"ad": "PopCorner-Trixie", "satici": "Pop Corner",
+    # {"ad": "PopCorner-Trixie", "marka": "Trixie", "satici": "Pop Corner",
     #  "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
     {"ad": "SipnJoy", "marka": "Sipnjoy", "satici": "SipnJoy",
      "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
@@ -61,7 +59,6 @@ def kucuk(metin):
 
 
 def uygun_mu(ad):
-    """Kesfedilen urun takibe girsin mi? (dahil + haric kelime filtreleri)"""
     a = kucuk(ad)
     if any(h in a for h in HARIC_KELIMELER):
         return False
@@ -71,7 +68,6 @@ def uygun_mu(ad):
 
 
 def kunye(marka, ad):
-    """Urun adindan seri / hacim / tur cikarir."""
     a = kucuk(ad)
     m = re.search(r"(\d{3,4})\s*ml", a)
     hacim = f"{m.group(1)}ml" if m else ""
@@ -96,8 +92,6 @@ def haric_listesi():
 
 
 def onceki_kesif_urunleri():
-    """fiyatlar.csv'den, kesif platformlarinin son turda fiyatli gorulen
-    urunlerini dondurur: {url: eski_kayit}. Kaybolanlari tespit icin."""
     try:
         with open("fiyatlar.csv", newline="", encoding="utf-8") as f:
             satirlar = list(csv.DictReader(f))
@@ -135,6 +129,12 @@ def gez(dugum):
             yield from gez(v)
 
 
+def slugla(metin):
+    harfler = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosucgiosu")
+    metin = metin.translate(harfler).lower()
+    return re.sub(r"[^a-z0-9]+", "-", metin).strip("-")
+
+
 # ---------------- KESIF: SHOPIFY (popcorner) ----------------
 
 def shopify_kesif(k, simdi, haric, gorulenler):
@@ -149,18 +149,18 @@ def shopify_kesif(k, simdi, haric, gorulenler):
             if not urunler:
                 break
             for u in urunler:
-                başlik = u.get("title", "")
+                baslik = u.get("title", "")
                 vendor = kucuk(u.get("vendor", ""))
                 if k.get("vendor") and k["vendor"] not in vendor:
                     continue
-                if not uygun_mu(başlik):
+                if not uygun_mu(baslik):
                     continue
-                seri, hacim, tur = kunye(k["marka"], başlik)
+                seri, hacim, tur = kunye(k["marka"], baslik)
                 for v in u.get("variants", []):
                     if not v.get("price"):
                         continue
                     vt = (v.get("title") or "").strip()
-                    etiket = başlik if vt.lower() in ("", "default title") else f"{başlik} {vt}"
+                    etiket = baslik if vt.lower() in ("", "default title") else f"{baslik} {vt}"
                     vurl = f"https://{k['alan']}/products/{u['handle']}"
                     if vt and vt.lower() != "default title" and v.get("id"):
                         vurl += f"?variant={v['id']}"
@@ -183,7 +183,6 @@ def shopify_kesif(k, simdi, haric, gorulenler):
 # ---------------- KESIF: NEXT_DATA (sipnjoylife) ----------------
 
 def slug_bul(d):
-    """Urun kaydinin derinliklerinde link/slug arar (metaData, translations...)."""
     for kap_adi in ("metaData", "translations", "seo"):
         kap = d.get(kap_adi)
         if kap is None:
@@ -194,12 +193,6 @@ def slug_bul(d):
                 if isinstance(v, str) and v.strip():
                     return v.strip().strip("/").split("/")[-1]
     return None
-
-
-def slugla(metin):
-    harfler = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosucgiosu")
-    metin = metin.translate(harfler).lower()
-    return re.sub(r"[^a-z0-9]+", "-", metin).strip("-")
 
 
 def nextdata_kesif(k, simdi, haric, gorulenler):
@@ -253,17 +246,8 @@ def nextdata_kesif(k, simdi, haric, gorulenler):
     print(f"[kesif:{k['platform']}] {len(sonuclar)} kayit kesfedildi")
     return sonuclar
 
-# ---------------- TRENDYOL (urunler.csv uzerinden, degisiklik yok) ----------------
 
-def _sayi_cek(d, alanlar):
-    for alan in alanlar:
-        v = d.get(alan)
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, dict) and isinstance(v.get("value"), (int, float)):
-            return float(v["value"])
-    return None
-
+# ---------------- TRENDYOL ----------------
 
 def kart_bilgileri(icerik):
     """Magaza sayfasindan {urun_no: (fiyat, ad, url)} cikarir."""
@@ -289,6 +273,7 @@ def kart_bilgileri(icerik):
         if guncel is not None:
             sonuc[no] = (guncel, ad, url)
     return sonuc
+
 
 def cv_fiyat(p):
     if not isinstance(p, dict):
@@ -467,11 +452,14 @@ def trendyol_iscisi(urunler, simdi):
                 for n, (f, ad, curl) in kartlar.items():
                     if n in no_map:
                         yeni += isle(n, f, mag["satici"])
-                    elif (f is not None and f >= TABAN_FIYAT and curl
-                          and curl not in haric_kume and uygun_mu(ad or "")):
-                        seri, hacim, tur = kunye(mag.get("marka", ""), ad)
+                        continue
+                    ad_g = ad or model_adi(curl)  # ad okunamadiysa linkten uret
+                    if (f is not None and f >= TABAN_FIYAT and curl
+                            and curl not in haric_kume and n not in islenen
+                            and uygun_mu(ad_g)):
+                        seri, hacim, tur = kunye(mag.get("marka", ""), ad_g)
                         sonuclar.append(kayit_yap(simdi, mag.get("marka", ""),
-                                                  seri, ad, hacim, tur,
+                                                  seri, ad_g, hacim, tur,
                                                   "Trendyol", f, "ok", curl,
                                                   mag["satici"]))
                         islenen.add(n)
@@ -495,11 +483,7 @@ def trendyol_iscisi(urunler, simdi):
                       f"(toplam {len(islenen)}/{len(no_map)})")
                 if not kartlar:
                     break
-                if len(islenen) == len(no_map):
-                    break
                 time.sleep(random.uniform(2, 3))
-            if len(islenen) == len(no_map):
-                break
 
         kalanlar = [no_map[n] for n in no_map if n not in islenen]
         if kalanlar:
@@ -560,7 +544,7 @@ def trendyol_iscisi(urunler, simdi):
     return sonuclar
 
 
-# ---------------- HEPSIBURADA (degisiklik yok: 403 verir, yerel robot tasir) ----
+# ---------------- HEPSIBURADA (403 verir; yerel robot tasiyor) ----------------
 
 def hb_iscisi(urunler, simdi):
     sonuclar = []
@@ -568,9 +552,8 @@ def hb_iscisi(urunler, simdi):
         try:
             c = requests.get(u["url"].strip(), headers=BASLIKLAR, timeout=20)
             durum = "ok" if c.status_code == 200 else f"http_{c.status_code}"
-            f = None
         except requests.RequestException:
-            f, durum = None, "baglanti_hatasi"
+            durum = "baglanti_hatasi"
         sonuclar.append(eski_kayit(u, simdi, None, durum))
         print(f"[www.hepsiburada.com] {u['seri_adi']}: None [{durum}]")
         time.sleep(random.uniform(2, 4))
@@ -583,7 +566,6 @@ def main():
     oncekiler = onceki_kesif_urunleri()
     print(f"Kesif: haric listesi {len(haric)} url, onceki tur {len(oncekiler)} urun")
 
-    # urunler.csv sadece Trendyol + Hepsiburada icin okunur
     with open("urunler.csv", newline="", encoding="utf-8") as f:
         tum_satirlar = [u for u in csv.DictReader(f) if (u.get("url") or "").strip()]
     trendyol_urunleri = [u for u in tum_satirlar if "trendyol" in u["url"].lower()]
@@ -604,7 +586,6 @@ def main():
         for is_ in isler:
             tum.extend(is_.result())
 
-    # Kaybolanlar: onceki turda olup bu kesifte gorunmeyenler
     kayip = 0
     for url, eski in oncekiler.items():
         if url not in gorulenler and url not in haric:
