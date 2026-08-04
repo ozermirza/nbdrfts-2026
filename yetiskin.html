@@ -254,6 +254,12 @@ function etiket(k) {
 
 const BOYUTLAR = { Marka: "marka", Platform: "platform", Hacim: "hacim", "Tür": "tur" };
 let gruplar = [], siralama = { k: null, yon: 1 };
+const ANA_SATICILAR = ["popcorner", "sipnjoy"];
+function anaMi(s) {
+  if (!s) return true;
+  const n = s.toLowerCase().replace(/\s+/g, "");
+  return ANA_SATICILAR.some(a => n.includes(a));
+}
 let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
 let acikGruplar = new Set();
 let gecmis = new Map();
@@ -299,7 +305,8 @@ function kategoriZam(gk, mod) {
 }
 
 async function baslat() {
-  const kayitlar = csvOku(await (await fetch("yetiskin_fiyatlar.csv?" + Date.now())).text());
+  let kayitlar = csvOku(await (await fetch("yetiskin_fiyatlar.csv?" + Date.now())).text());
+  kayitlar = kayitlar.filter(k => anaMi(k.satici));   // farkli satici takip edilmiyor
 
   const anaTurlar = [...new Set(kayitlar.filter(k => k.platform !== "Hepsiburada")
                                         .map(k => k.tarih))].sort();
@@ -390,7 +397,7 @@ async function baslat() {
       kategoriZam: kategoriZam(anahtar, mod),
       durum: fiyatli.length ? "ok" : ilk.durum,
       url: ilk.url, anaUyeler, digerUyeler, istisnalar,
-      degisenSayi: uyeler.filter(u => u.yon).length
+      degisenSayi: uyeler.filter(u => u.yon && anaMi(u.satici)).length
     };
   });
 
@@ -514,7 +521,7 @@ function ciz() {
     kayitSay += uyeler.length;
     hatali += uyeler.filter(u => u.durum !== "ok").length;
     g.anaUyeler.forEach(u => {
-      if (!u.fiyat || !g.fiyat) return;
+      if (!u.fiyat || !g.fiyat || !anaMi(u.satici)) return;
       const f = parseFloat(u.fiyat), m = parseFloat(g.fiyat);
       if (f < m || u.yon === "dusus") indirimli++;
       else if (f > m || u.yon === "artis") grupUstu++;
