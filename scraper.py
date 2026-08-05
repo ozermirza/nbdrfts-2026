@@ -615,8 +615,47 @@ def dosyaya_ekle(dosya, kayitlar):
         y.writerows(kayitlar)
 
 
+def arsivle(dosya):
+    """Ay degistiginde onceki ay(lar)in kayitlarini arsiv/ altina tasir;
+    ana dosyada yalnizca icinde bulunulan ayin kayitlari kalir."""
+    import os
+    ay = datetime.now(TURKIYE_SAATI).strftime("%Y-%m")
+    try:
+        with open(dosya, newline="", encoding="utf-8") as f:
+            satirlar = list(csv.DictReader(f))
+    except FileNotFoundError:
+        return
+    eskiler = [s for s in satirlar if (s.get("tarih") or "")[:7] < ay]
+    if not eskiler:
+        return
+    os.makedirs("arsiv", exist_ok=True)
+    gruplu = {}
+    for s in eskiler:
+        gruplu.setdefault(s["tarih"][:7], []).append(s)
+    for ayk, liste in gruplu.items():
+        hedef = f"arsiv/{dosya.rsplit('.', 1)[0]}-{ayk}.csv"
+        try:
+            with open(hedef, "r", encoding="utf-8") as f:
+                bos = f.readline().strip() == ""
+        except FileNotFoundError:
+            bos = True
+        with open(hedef, "a", newline="", encoding="utf-8") as f:
+            y = csv.DictWriter(f, fieldnames=SUTUNLAR)
+            if bos:
+                y.writeheader()
+            y.writerows(liste)
+    kalanlar = [s for s in satirlar if (s.get("tarih") or "")[:7] >= ay]
+    with open(dosya, "w", newline="", encoding="utf-8") as f:
+        y = csv.DictWriter(f, fieldnames=SUTUNLAR)
+        y.writeheader()
+        y.writerows(kalanlar)
+    print(f"[arsiv] {dosya}: {len(eskiler)} kayit arsive tasindi")
+
+
 def main():
     simdi = datetime.now(TURKIYE_SAATI).strftime("%Y-%m-%d %H:%M")
+    arsivle(ANA_DOSYA)
+    arsivle(YETISKIN_DOSYA)
     haric = haric_listesi()
     onceki_ana = onceki_kesif_urunleri(ANA_DOSYA)
     onceki_yet = onceki_kesif_urunleri(YETISKIN_DOSYA)
