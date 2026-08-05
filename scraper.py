@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 14)
+# FIYAT RADARI - scraper.py (surum 16)
 # Yenilikler (surum 13'e gore):
 #   - Magaza kartlarinda urun adi artik gorselin alt ozelliginden okunuyor
 #     (product-name elemani cogu kartta kalkmisti)
