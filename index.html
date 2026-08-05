@@ -593,7 +593,15 @@ function ciz() {
                b.dataset.ad)));
 }
 
-function grafikAc(kim, grupAnahtari, baslik) {
+function sonDeger(liste, z) {
+  let s = null;
+  for (const n of liste) {
+    if (zaman(n.tarih) <= z) s = n; else break;
+  }
+  return s;
+}
+
+function grafikAc(kim, grupAnahtari, baslik, isaret = null) {
   const urunH = kim ? (gecmis.get(kim) || []) : [];
   const grupH = grupGecmis.get(grupAnahtari) || [];
   if (!urunH.length && !grupH.length) return;
@@ -669,6 +677,40 @@ function grafikAc(kim, grupAnahtari, baslik) {
   x.textAlign = "right"; x.textBaseline = "bottom";
   x.font = "bold 12px sans-serif";
   x.fillText(tl(sonN.fiyat), W - M.sag - 10, sy - 6);
+
+  // --- fare ipucu: en yakin tur cizgisi + tarih/fiyat kutusu ---
+  const zamanlar = [...new Set(hepsi.map(n => zaman(n.tarih)))].sort((a, b) => a - b);
+  if (isaret !== null) {
+    const zx = px(isaret);
+    x.strokeStyle = rSoluk; x.lineWidth = 1; x.setLineDash([3, 3]);
+    x.beginPath(); x.moveTo(zx, M.ust); x.lineTo(zx, H - M.alt); x.stroke();
+    x.setLineDash([]);
+    const uN = sonDeger(urunH, isaret), gN = sonDeger(grupH, isaret);
+    const satirlar = [kisaTarih(new Date(isaret).toISOString().slice(0, 16).replace("T", " "))];
+    if (uN) satirlar.push("Ürün: " + tl(uN.fiyat));
+    if (gN) satirlar.push("Grup: " + tl(gN.fiyat));
+    x.font = "11px sans-serif";
+    const gen = Math.max(...satirlar.map(s => x.measureText(s).width)) + 16;
+    const yuk = satirlar.length * 15 + 10;
+    let kx = zx + 10;
+    if (kx + gen > W - M.sag) kx = zx - gen - 10;
+    const ky = M.ust + 6;
+    x.fillStyle = stil.getPropertyValue("--yuzey2").trim();
+    x.strokeStyle = rCizgi; x.lineWidth = 1;
+    x.fillRect(kx, ky, gen, yuk); x.strokeRect(kx, ky, gen, yuk);
+    x.textAlign = "left"; x.textBaseline = "top";
+    x.fillStyle = stil.getPropertyValue("--metin").trim();
+    satirlar.forEach((s, i) => x.fillText(s, kx + 8, ky + 6 + i * 15));
+  }
+  c.onmousemove = e => {
+    if (!zamanlar.length) return;
+    const mx = e.offsetX;
+    let enYakin = zamanlar[0];
+    for (const z of zamanlar)
+      if (Math.abs(px(z) - mx) < Math.abs(px(enYakin) - mx)) enYakin = z;
+    if (enYakin !== isaret) grafikAc(kim, grupAnahtari, baslik, enYakin);
+  };
+  c.onmouseleave = () => { if (isaret !== null) grafikAc(kim, grupAnahtari, baslik, null); };
 }
 
 function temaKur() {
