@@ -521,11 +521,19 @@ def trendyol_iscisi(urunler, simdi):
         ])
 
         for mag in MAGAZALAR:
+            # her magaza taze tarayici baglamiyla acilir (oturum isaretlenmesine karsi)
+            mag_baglam = tarayici.new_context(locale="tr-TR",
+                                              user_agent=BASLIKLAR["User-Agent"])
+            mag_baglam.add_cookies([
+                {"name": "countryCode", "value": "TR", "domain": ".trendyol.com", "path": "/"},
+                {"name": "language", "value": "tr", "domain": ".trendyol.com", "path": "/"},
+                {"name": "storefrontId", "value": "1", "domain": ".trendyol.com", "path": "/"},
+            ])
             for pi in range(1, 16):
                 ayrac = "&" if "?" in mag["taban"] else "?"
                 url = f"{mag['taban']}{ayrac}pi={pi}"
                 cv_cevaplar = []
-                sayfa = baglam.new_page()
+                sayfa = mag_baglam.new_page()
 
                 def topla(yanit):
                     try:
@@ -594,6 +602,7 @@ def trendyol_iscisi(urunler, simdi):
                 if not kartlar:
                     break
                 time.sleep(random.uniform(2, 3))
+            mag_baglam.close()
 
         kalanlar = [no_map[n] for n in no_map if n not in islenen]
         if kalanlar:
