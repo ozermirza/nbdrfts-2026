@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 16)
+# FIYAT RADARI - scraper.py (surum 17)
 # Yenilikler (surum 13'e gore):
 #   - Magaza kartlarinda urun adi artik gorselin alt ozelliginden okunuyor
 #     (product-name elemani cogu kartta kalkmisti)
@@ -61,6 +61,9 @@ MAGAZALAR = [
     #  "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
     {"ad": "SipnJoy", "marka": "Sipnjoy", "satici": "SipnJoy",
      "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
+    {"ad": "Mareas-CoolBottles", "marka": "Cool Bottles", "satici": "Mareas",
+     "taban": "https://www.trendyol.com/sr?lc=1193&os=1&mid=391392",
+     "seriler": ["The Sport Bottle", "The Tumbler", "The Bottle"]},
 ]
 
 
@@ -92,7 +95,7 @@ def sinifla(ad):
         return "yetiskin"
     return "ana" if any(d in a for d in DAHIL_KELIMELER) else None
 
-def kunye(marka, ad):
+def kunye(marka, ad, ekstra_seriler=None):
     a = kucuk(ad)
     h = hacim_ml(ad)
     hacim = f"{h}ml" if h else ""
@@ -105,14 +108,14 @@ def kunye(marka, ad):
     else:
         tur = "matara"
     seri = None
-    for s in SERILER:
+    for s in (ekstra_seriler or []) + SERILER:
         if kucuk(s).replace("'", "") in a.replace("'", ""):
             seri = s
             break
     if seri is None:
         seri = tur.capitalize()
     return seri, hacim, tur
-
+    
 
 def haric_listesi():
     try:
@@ -511,7 +514,8 @@ def trendyol_iscisi(urunler, simdi):
                     if (f is not None and f >= TABAN_FIYAT and curl
                             and curl not in haric_kume and n not in islenen
                             and sinif is not None):
-                        seri, hacim, tur = kunye(mag.get("marka", ""), ad_g)
+                        seri, hacim, tur = kunye(mag.get("marka", ""), ad_g,
+                                                 mag.get("seriler"))
                         sonuclar.append(kayit_yap(simdi, mag.get("marka", ""),
                                                   seri, ad_g, hacim, tur,
                                                   "Trendyol", f, "ok", curl,
