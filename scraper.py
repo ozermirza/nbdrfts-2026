@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 18)
+# FIYAT RADARI - scraper.py (surum 19)
+# 19: kidsnjoy ?sayfa= dongusu + Trendyol magazalarina taze baglam
 # Yenilikler (surum 17'ye gore):
 #   - sipnjoylife kesfi EMEKLI: site kidsnjoystore.com'a tasindi (Ticimax).
 #     Yeni kidsnjoy_iscisi: 3 kategori sayfasi tarayiciyla acilir,
@@ -276,61 +277,75 @@ def kidsnjoy_iscisi(simdi, haric, gorulenler):
                                           user_agent=BASLIKLAR["User-Agent"])
             sayfa = baglam.new_page()
             for kurl, sinif_zorla in KIDSNJOY["kategoriler"]:
-                ham = []
-                try:
-                    sayfa.goto(kurl, timeout=60000, wait_until="domcontentloaded")
-                    sayfa.wait_for_timeout(4000)
-                    onceki = -1
-                    for _ in range(8):
-                        sayfa.evaluate(
-                            "window.scrollTo(0, document.body.scrollHeight)")
-                        sayfa.wait_for_timeout(1800)
-                        adet = sayfa.eval_on_selector_all(
-                            ".productItem", "els => els.length")
-                        if adet == onceki:
-                            break
-                        onceki = adet
-                    ham = sayfa.eval_on_selector_all(
-                        ".productItem",
-                        """els => els.map(e => {
-                            const a = e.querySelector('a.detailUrl[title]')
-                                   || e.querySelector('a[title][href]');
-                            return {stokYok: (e.className || '').includes('StokYok'),
-                                    baslik: a ? (a.getAttribute('title') || '') : '',
-                                    href: a ? a.href : '',
-                                    metin: (e.innerText || '').slice(0, 300)};
-                        })""")
-                except Exception as h:
-                    print(f"[kesif:kidsnjoy] {kurl}: HATA {h}")
-                    continue
-                yeni = stoksuz = 0
-                for kk in ham:
-                    if not kk["href"]:
-                        continue
-                    if kk["stokYok"]:
-                        stoksuz += 1
-                        continue
-                    url = kk["href"].split("?")[0]
-                    if url in haric or url in gorulenler:
-                        continue
-                    ad = (kk["baslik"] or kk["metin"].split("\n")[0]).strip()
-                    sinif = sinif_zorla or sinifla(ad)
-                    if sinif is None:
-                        continue
-                    guncel, liste = metin_fiyat_liste(kk["metin"])
-                    if guncel is None:
-                        continue
-                    gorulenler.add(url)
-                    seri, hacim, tur = kunye(KIDSNJOY["marka"], ad)
-                    sonuclar.append(kayit_yap(simdi, KIDSNJOY["marka"], seri,
-                                              ad, hacim, tur,
-                                              KIDSNJOY["platform"], guncel,
-                                              "ok", url, KIDSNJOY["satici"],
-                                              sinif=sinif, liste=liste))
-                    yeni += 1
+                kat_gorulen = set()
+                kat_kayit = kat_stoksuz = 0
+                for sno in range(1, 8):
+                    surl = kurl if sno == 1 else f"{kurl}?sayfa={sno}"
+                    ham = []
+                    try:
+                        sayfa.goto(surl, timeout=60000,
+                                   wait_until="domcontentloaded")
+                        sayfa.wait_for_timeout(4000)
+                        onceki = -1
+                        for _ in range(4):
+                            sayfa.evaluate(
+                                "window.scrollTo(0, document.body.scrollHeight)")
+                            sayfa.wait_for_timeout(1500)
+                            adet = sayfa.eval_on_selector_all(
+                                ".productItem", "els => els.length")
+                            if adet == onceki:
+                                break
+                            onceki = adet
+                        ham = sayfa.eval_on_selector_all(
+                            ".productItem",
+                            """els => els.map(e => {
+                                const a = e.querySelector('a.detailUrl[title]')
+                                       || e.querySelector('a[title][href]');
+                                return {stokYok: (e.className || '').includes('StokYok'),
+                                        baslik: a ? (a.getAttribute('title') || '') : '',
+                                        href: a ? a.href : '',
+                                        metin: (e.innerText || '').slice(0, 300)};
+                            })""")
+                    except Exception as h:
+                        print(f"[kesif:kidsnjoy] {surl}: HATA {h}")
+                        break
+                    yeni_gorulen = 0
+                    for kk in ham:
+                        if not kk["href"]:
+                            continue
+                        url = kk["href"].split("?")[0]
+                        if url in kat_gorulen:
+                            continue          # onceki sayfanin tekrari
+                        kat_gorulen.add(url)
+                        yeni_gorulen += 1
+                        if kk["stokYok"]:
+                            kat_stoksuz += 1
+                            continue
+                        if url in haric or url in gorulenler:
+                            continue
+                        ad = (kk["baslik"] or kk["metin"].split("\n")[0]).strip()
+                        sinif = sinif_zorla or sinifla(ad)
+                        if sinif is None:
+                            continue
+                        guncel, liste = metin_fiyat_liste(kk["metin"])
+                        if guncel is None:
+                            continue
+                        gorulenler.add(url)
+                        seri, hacim, tur = kunye(KIDSNJOY["marka"], ad)
+                        sonuclar.append(kayit_yap(simdi, KIDSNJOY["marka"],
+                                                  seri, ad, hacim, tur,
+                                                  KIDSNJOY["platform"], guncel,
+                                                  "ok", url,
+                                                  KIDSNJOY["satici"],
+                                                  sinif=sinif, liste=liste))
+                        kat_kayit += 1
+                    print(f"[kesif:kidsnjoy] {kurl.rsplit('/', 1)[-1]} "
+                          f"sayfa {sno}: {len(ham)} kart, {yeni_gorulen} yeni")
+                    if not ham or yeni_gorulen == 0:
+                        break
+                    time.sleep(random.uniform(1, 2))
                 print(f"[kesif:kidsnjoy] {kurl.rsplit('/', 1)[-1]}: "
-                      f"{len(ham)} kart, {yeni} kayit, {stoksuz} stoksuz")
-                time.sleep(random.uniform(1, 2))
+                      f"toplam {kat_kayit} kayit, {kat_stoksuz} stoksuz")
             tarayici.close()
     except Exception as h:
         print(f"[kesif:kidsnjoy] HATA: {h}")
