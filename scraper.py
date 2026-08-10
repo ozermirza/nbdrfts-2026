@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 17)
-# Yenilikler (surum 13'e gore):
-#   - Magaza kartlarinda urun adi artik gorselin alt ozelliginden okunuyor
-#     (product-name elemani cogu kartta kalkmisti)
-#   - Kesifte tekrar-sayma duzeltildi (ayni urun JSON'da defalarca geciyordu;
-#     510 kayit -> gercek sayi)
-#   - Yetiskin urun sinifi (tumbler/mug/kupa, SADECE isimden; hacim kullanilmaz)
-#     yetiskin_fiyatlar.csv dosyasina yazilir (sitede ayri sayfada gosterilecek)
-#   - satista_degil kayitlari artik her turda tekrarlanmiyor
-#   - hb_iscisi kaldirildi (403 kirliligi; HB'yi yerel robot tasiyor)
+# FIYAT RADARI - scraper.py (surum 18)
+# Yenilikler (surum 17'ye gore):
+#   - sipnjoylife kesfi EMEKLI: site kidsnjoystore.com'a tasindi (Ticimax).
+#     Yeni kidsnjoy_iscisi: 3 kategori sayfasi tarayiciyla acilir,
+#     .productItem kartlarindan ad/link/fiyat okur; StokYok urunler atlanir.
+#     Her desen artik ayri urun sayfasi (?Desen= modeli bitti).
+#   - Liste (etiket) fiyati kaydi: ustu cizili / compare_at / sellingPrice
+#     degerleri kategori1 sutununa yazilir; site "-%X etiket" rozeti basar.
+#   - Trendyol magaza sayfalari 0 kart donerse 1 kez yeniden denenir
+#     (bos kabuk ruleti sigortasi - Mareas icin kritik).
 
 import csv
 import html as html_mod
@@ -30,18 +30,17 @@ BASLIKLAR = {
 TURKIYE_SAATI = timezone(timedelta(hours=3))
 SUTUNLAR = ["tarih", "marka", "seri_adi", "varyant", "kategori1", "hacim",
             "kategori2", "platform", "fiyat", "durum", "url", "satici"]
+# kategori1 sutunu = satici etiket/liste fiyati (indirim oncesi), bos olabilir
 
 ANA_DOSYA = "fiyatlar.csv"
 YETISKIN_DOSYA = "yetiskin_fiyatlar.csv"
 
-ANA_SATICILAR = {"popcorner", "sipnjoy"}
+ANA_SATICILAR = {"popcorner", "sipnjoy", "mareas"}
 TABAN_FIYAT = 500   # bu tutarin alti hatali sayilir
 
 # ---- SINIFLANDIRMA AYARLARI ----
-# Kural sirasi: once HARIC (elenir) -> sonra YETISKIN (ayri dosya)
-# -> sonra DAHIL/SERI (ana dosya) -> hicbiri degilse takip edilmez.
-# Siniflandirma tamamen isim uzerindendir; ileride gerekirse marka bazli
-# kelime listelerine cevrilebilir.
+# Kural sirasi: HARIC -> SERI (bilinen cocuk serisi her zaman 'ana') ->
+# YETISKIN kelimeleri -> DAHIL kelimeleri. Hacim KULLANILMAZ.
 DAHIL_KELIMELER = ["matara", "termos", "suluk", "bottle", "şişe", "sise"]
 HARIC_KELIMELER = ["tritan", "yemek", "food", "beslenme", "mama"]
 YETISKIN_KELIMELER = ["tumbler", "mug", "kupa", "yetişkin", "yetiskin"]
@@ -51,9 +50,19 @@ SERILER = ["FlipSip", "SippyPals", "WideWonder", "SipSquad", "Lil'Straw",
 KESIF = [
     {"marka": "Trixie", "platform": "popcorner", "tip": "shopify",
      "alan": "popcorner.com.tr", "satici": "popcorner", "vendor": "trixie"},
-    {"marka": "Sipnjoy", "platform": "sipnjoylife", "tip": "nextdata",
-     "taban": "https://www.sipnjoylife.com", "satici": "sipnjoy"},
 ]
+
+# ---- KIDSNJOY (eski sipnjoylife; Ticimax) ----
+# Kullanicinin verdigi 3 kategori taranir. sinif_zorla=None ise sinif
+# isim/serilerden; "yetiskin" ise kategori zoruyla yetiskin dosyasina.
+KIDSNJOY = {
+    "marka": "Sipnjoy", "platform": "kidsnjoy", "satici": "sipnjoy",
+    "kategoriler": [
+        ("https://kidsnjoystore.com/cocuk-su-termosu-20", None),
+        ("https://kidsnjoystore.com/tumbler-24", None),
+        ("https://kidsnjoystore.com/yetiskin-28", "yetiskin"),
+    ],
+}
 
 # ---- TRENDYOL MAGAZALARI ----
 MAGAZALAR = [
@@ -81,11 +90,7 @@ def hacim_ml(ad):
 
 
 def sinifla(ad):
-    """Urun adina gore sinif: 'ana' (cocuk urunleri),
-    'yetiskin' (tumbler/mug/kupa) veya None (takip edilmez).
-    Kural sirasi: HARIC -> SERI (bilinen cocuk serisi her zaman 'ana',
-    adinda tumbler gecse bile) -> YETISKIN kelimeleri -> DAHIL kelimeleri.
-    Tamamen isim uzerinden isler; hacim kullanilmaz."""
+    """'ana' (cocuk), 'yetiskin' veya None (takip edilmez). Isim uzerinden."""
     a = kucuk(ad)
     if any(h in a for h in HARIC_KELIMELER):
         return None
@@ -94,6 +99,7 @@ def sinifla(ad):
     if any(y in a for y in YETISKIN_KELIMELER):
         return "yetiskin"
     return "ana" if any(d in a for d in DAHIL_KELIMELER) else None
+
 
 def kunye(marka, ad, ekstra_seriler=None):
     a = kucuk(ad)
@@ -115,7 +121,7 @@ def kunye(marka, ad, ekstra_seriler=None):
     if seri is None:
         seri = tur.capitalize()
     return seri, hacim, tur
-    
+
 
 def haric_listesi():
     try:
@@ -127,8 +133,8 @@ def haric_listesi():
 
 
 def yetiskin_listesi():
-    """yetiskin.csv: linki yazilan urun, adi ne olursa olsun yetiskin
-    dosyasina zorlanir (? sonrasi atilarak karsilastirilir)."""
+    """yetiskin.csv: linki yazilan urun her kosulda yetiskin dosyasina
+    zorlanir (? sonrasi atilarak onek karsilastirmasi)."""
     try:
         with open("yetiskin.csv", newline="", encoding="utf-8") as f:
             return {(s.get("url") or "").strip().split("?")[0]
@@ -144,7 +150,7 @@ def onceki_kesif_urunleri(dosya):
             satirlar = list(csv.DictReader(f))
     except FileNotFoundError:
         return {}
-    kesif_plat = {k["platform"] for k in KESIF}
+    kesif_plat = {k["platform"] for k in KESIF} | {KIDSNJOY["platform"]}
     ilgili = [s for s in satirlar if s.get("platform") in kesif_plat]
     if not ilgili:
         return {}
@@ -157,10 +163,11 @@ def onceki_kesif_urunleri(dosya):
 
 
 def kayit_yap(simdi, marka, seri, varyant, hacim, tur, platform, fiyat, durum,
-              url, satici, sinif="ana"):
+              url, satici, sinif="ana", liste=None):
     return {
         "tarih": simdi, "marka": marka, "seri_adi": seri, "varyant": varyant,
-        "kategori1": "", "hacim": hacim, "kategori2": tur, "platform": platform,
+        "kategori1": liste if liste else "", "hacim": hacim, "kategori2": tur,
+        "platform": platform,
         "fiyat": fiyat if fiyat is not None else "", "durum": durum,
         "url": url, "satici": satici, "_sinif": sinif,
     }
@@ -176,10 +183,27 @@ def gez(dugum):
             yield from gez(v)
 
 
-def slugla(metin):
-    harfler = str.maketrans("çğıöşüÇĞİÖŞÜ", "cgiosucgiosu")
-    metin = metin.translate(harfler).lower()
-    return re.sub(r"[^a-z0-9]+", "-", metin).strip("-")
+def metin_fiyat_liste(metin):
+    """Kart metninden (guncel, liste) cikarir. TL ve ₺ (once/sonra)
+    bicimleri desteklenir; taksit ve 'TL ve uzeri' elenir. Taban ustu
+    degerlerin en dusugu guncel, belirgin yuksek olani etiket fiyatidir."""
+    if not metin:
+        return None, None
+    temiz = re.sub(r"\d+\s*x\s*[\d.,]+\s*(?:TL|₺)", " ", metin)
+    temiz = re.sub(r"\d[\d.,]*\s*(?:TL|₺)\s*(ve|üzeri|uzeri)", " ", temiz)
+    hamlar = re.findall(r"(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)\s*(?:TL|₺)", temiz)
+    hamlar += re.findall(r"₺\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?)", temiz)
+    adaylar = []
+    for h in hamlar:
+        try:
+            adaylar.append(float(h.replace(".", "").replace(",", ".")))
+        except ValueError:
+            continue
+    adaylar = [a for a in adaylar if a >= TABAN_FIYAT]
+    if not adaylar:
+        return None, None
+    guncel, liste = min(adaylar), max(adaylar)
+    return guncel, (liste if liste > guncel * 1.01 else None)
 
 
 # ---------------- KESIF: SHOPIFY (popcorner) ----------------
@@ -217,11 +241,18 @@ def shopify_kesif(k, simdi, haric, gorulenler):
                     fiyat = float(v["price"])
                     if fiyat < TABAN_FIYAT:
                         continue
+                    liste = None
+                    cap = v.get("compare_at_price")
+                    try:
+                        if cap and float(cap) > fiyat:
+                            liste = float(cap)
+                    except (TypeError, ValueError):
+                        pass
                     gorulenler.add(vurl)
                     sonuclar.append(kayit_yap(simdi, k["marka"], seri, etiket,
                                               hacim, tur, k["platform"], fiyat,
                                               "ok", vurl, k["satici"],
-                                              sinif=sinif))
+                                              sinif=sinif, liste=liste))
             time.sleep(2)
     except (requests.RequestException, ValueError) as h:
         print(f"[kesif:{k['platform']}] HATA: {h}")
@@ -229,81 +260,89 @@ def shopify_kesif(k, simdi, haric, gorulenler):
     return sonuclar
 
 
-# ---------------- KESIF: NEXT_DATA (sipnjoylife) ----------------
+# ---------------- KESIF: TICIMAX (kidsnjoystore) ----------------
 
-def slug_bul(d):
-    for kap_adi in ("metaData", "translations", "seo"):
-        kap = d.get(kap_adi)
-        if kap is None:
-            continue
-        for ic in gez(kap):
-            for alan in ("slug", "seoUrl", "url", "handle", "path"):
-                v = ic.get(alan)
-                if isinstance(v, str) and v.strip():
-                    return v.strip().strip("/").split("/")[-1]
-    return None
-
-
-def nextdata_kesif(k, simdi, haric, gorulenler):
+def kidsnjoy_iscisi(simdi, haric, gorulenler):
+    """kidsnjoystore.com (Ticimax): verilen 3 kategori sayfasi tarayiciyla
+    acilir, tembel yukleme icin kart sayisi sabitlenene dek kaydirilir,
+    .productItem kartlarindan ad/link/fiyat okunur. StokYok atlanir.
+    Yetiskin kategorisindeki her urun kategori zoruyla yetiskine gider."""
+    from playwright.sync_api import sync_playwright
     sonuclar = []
     try:
-        html = requests.get(k["taban"], headers=BASLIKLAR, timeout=30).text
-    except requests.RequestException as h:
-        print(f"[kesif:{k['platform']}] HATA: {h}")
-        return sonuclar
-    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
-    if not m:
-        print(f"[kesif:{k['platform']}] NEXT_DATA bulunamadi")
-        return sonuclar
-    try:
-        veri = json.loads(m.group(1))
-    except json.JSONDecodeError:
-        return sonuclar
-
-    for d in gez(veri):
-        if not (isinstance(d.get("variants"), list) and d.get("name") and d["variants"]):
-            continue
-        ad = d["name"]
-        sinif = sinifla(ad)
-        if sinif is None:
-            continue
-        seri, hacim, tur = kunye(k["marka"], ad)
-        slug = slug_bul(d) or slugla(ad)
-        taban_url = f"{k['taban']}/{slug}"
-        for v in d["variants"]:
-            if not isinstance(v, dict):
-                continue
-            vad = ""
-            vv = v.get("variantValues")
-            if isinstance(vv, list) and vv and isinstance(vv[0], dict):
-                vad = vv[0].get("name", "") or ""
-            fiy = None
-            pr = v.get("prices")
-            if isinstance(pr, list) and pr and isinstance(pr[0], dict):
-                fiy = pr[0].get("discountPrice") or pr[0].get("sellPrice")
-            if fiy is None:
-                continue
-            fiyat = float(fiy)
-            if fiyat < TABAN_FIYAT:
-                continue
-            vurl = taban_url + (f"?Desen={vad.replace(' ', '-')}" if vad else "")
-            if vurl in haric or vurl in gorulenler:
-                continue
-            gorulenler.add(vurl)
-            sonuclar.append(kayit_yap(simdi, k["marka"], seri,
-                                      vad or ad, hacim, tur, k["platform"],
-                                      fiyat, "ok", vurl, k["satici"],
-                                      sinif=sinif))
-    print(f"[kesif:{k['platform']}] {len(sonuclar)} kayit kesfedildi")
+        with sync_playwright() as p:
+            tarayici = p.chromium.launch()
+            baglam = tarayici.new_context(locale="tr-TR",
+                                          user_agent=BASLIKLAR["User-Agent"])
+            sayfa = baglam.new_page()
+            for kurl, sinif_zorla in KIDSNJOY["kategoriler"]:
+                ham = []
+                try:
+                    sayfa.goto(kurl, timeout=60000, wait_until="domcontentloaded")
+                    sayfa.wait_for_timeout(4000)
+                    onceki = -1
+                    for _ in range(8):
+                        sayfa.evaluate(
+                            "window.scrollTo(0, document.body.scrollHeight)")
+                        sayfa.wait_for_timeout(1800)
+                        adet = sayfa.eval_on_selector_all(
+                            ".productItem", "els => els.length")
+                        if adet == onceki:
+                            break
+                        onceki = adet
+                    ham = sayfa.eval_on_selector_all(
+                        ".productItem",
+                        """els => els.map(e => {
+                            const a = e.querySelector('a.detailUrl[title]')
+                                   || e.querySelector('a[title][href]');
+                            return {stokYok: (e.className || '').includes('StokYok'),
+                                    baslik: a ? (a.getAttribute('title') || '') : '',
+                                    href: a ? a.href : '',
+                                    metin: (e.innerText || '').slice(0, 300)};
+                        })""")
+                except Exception as h:
+                    print(f"[kesif:kidsnjoy] {kurl}: HATA {h}")
+                    continue
+                yeni = stoksuz = 0
+                for kk in ham:
+                    if not kk["href"]:
+                        continue
+                    if kk["stokYok"]:
+                        stoksuz += 1
+                        continue
+                    url = kk["href"].split("?")[0]
+                    if url in haric or url in gorulenler:
+                        continue
+                    ad = (kk["baslik"] or kk["metin"].split("\n")[0]).strip()
+                    sinif = sinif_zorla or sinifla(ad)
+                    if sinif is None:
+                        continue
+                    guncel, liste = metin_fiyat_liste(kk["metin"])
+                    if guncel is None:
+                        continue
+                    gorulenler.add(url)
+                    seri, hacim, tur = kunye(KIDSNJOY["marka"], ad)
+                    sonuclar.append(kayit_yap(simdi, KIDSNJOY["marka"], seri,
+                                              ad, hacim, tur,
+                                              KIDSNJOY["platform"], guncel,
+                                              "ok", url, KIDSNJOY["satici"],
+                                              sinif=sinif, liste=liste))
+                    yeni += 1
+                print(f"[kesif:kidsnjoy] {kurl.rsplit('/', 1)[-1]}: "
+                      f"{len(ham)} kart, {yeni} kayit, {stoksuz} stoksuz")
+                time.sleep(random.uniform(1, 2))
+            tarayici.close()
+    except Exception as h:
+        print(f"[kesif:kidsnjoy] HATA: {h}")
+    print(f"[kesif:kidsnjoy] toplam {len(sonuclar)} kayit kesfedildi")
     return sonuclar
 
 
 # ---------------- TRENDYOL ----------------
 
 def kart_bilgileri(icerik):
-    """Magaza sayfasindan {urun_no: (fiyat, ad, url)} cikarir.
-    Ad, once gorselin alt ozelliginden okunur (tam ad); olmazsa
-    eski product-name elemani denenir."""
+    """Magaza sayfasindan {urun_no: (fiyat, ad, url, liste)} cikarir.
+    liste = ustu cizili (indirim oncesi) fiyat, yoksa None."""
     sonuc = {}
     parcalar = re.split(r'<a id="(\d+)" class="product-card"', icerik)
     for i in range(1, len(parcalar) - 1, 2):
@@ -315,19 +354,23 @@ def kart_bilgileri(icerik):
         if not ad:
             m = re.search(r'class="product-name[^"]*"[^>]*>([^<]{3,120})<', govde)
             ad = re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
-        guncel = None
+        guncel, eskiler = None, []
         for m in re.finditer(r'class="([^"]*price[^"]*)"[^>]*>\s*([\d.,]+)\s*TL', govde):
-            sinif, ham = m.group(1), m.group(2)
-            if "strikethrough" in sinif or "old" in sinif:
-                continue
+            sinif_adi, ham = m.group(1), m.group(2)
             deger = float(ham.replace(".", "").replace(",", "."))
-            if "price-section" in sinif:
+            if "strikethrough" in sinif_adi or "old" in sinif_adi:
+                eskiler.append(deger)
+                continue
+            if "price-section" in sinif_adi:
                 guncel = deger
                 break
             if guncel is None:
                 guncel = deger
+        liste = max(eskiler) if eskiler else None
+        if liste is not None and guncel is not None and liste <= guncel:
+            liste = None
         if guncel is not None:
-            sonuc[no] = (guncel, ad, url)
+            sonuc[no] = (guncel, ad, url, liste)
     return sonuc
 
 
@@ -354,15 +397,18 @@ def cv_fiyat(p):
 
 
 def trendyol_winner_fiyat(icerik):
-    m = re.search(
+    """(fiyat, liste) doner: indirim varsa liste = sellingPrice."""
+    mD = re.search(
         r'"winnerVariant".{0,3000}?"discountedPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
         icerik, re.S)
-    if m:
-        return float(m.group(1))
-    m = re.search(
+    mS = re.search(
         r'"winnerVariant".{0,3000}?"sellingPrice"\s*:\s*\{\s*"value"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
         icerik, re.S)
-    return float(m.group(1)) if m else None
+    d = float(mD.group(1)) if mD else None
+    s = float(mS.group(1)) if mS else None
+    if d is not None and s is not None and s > d:
+        return d, s
+    return (d if d is not None else s), None
 
 
 def trendyol_ldjson_fiyat(icerik):
@@ -431,11 +477,11 @@ def model_adi(url):
     return re.sub(r"-p-\d+$", "", yol).replace("-", " ")
 
 
-def eski_kayit(u, simdi, fiyat, durum, varyant=None, satici=""):
+def eski_kayit(u, simdi, fiyat, durum, varyant=None, satici="", liste=None):
     return {
         "tarih": simdi, "marka": u["marka"], "seri_adi": u["seri_adi"],
         "varyant": varyant if varyant is not None else "",
-        "kategori1": u.get("kategori1", ""), "hacim": u["hacim"],
+        "kategori1": liste if liste else "", "hacim": u["hacim"],
         "kategori2": u.get("kategori2", ""), "platform": u["platform"],
         "fiyat": fiyat if fiyat is not None else "", "durum": durum,
         "url": u["url"].strip(), "satici": satici, "_sinif": "ana",
@@ -454,13 +500,13 @@ def trendyol_iscisi(urunler, simdi):
             no_map[n] = u
     islenen = set()
 
-    def isle(n, fiyat, satici, varyant_adi=None):
+    def isle(n, fiyat, satici, varyant_adi=None, liste=None):
         if (n in no_map and n not in islenen and fiyat is not None
                 and fiyat >= TABAN_FIYAT):
             u = no_map[n]
             sonuclar.append(eski_kayit(u, simdi, fiyat, "ok",
                                        varyant=varyant_adi or model_adi(u["url"]),
-                                       satici=satici))
+                                       satici=satici, liste=liste))
             islenen.add(n)
             return 1
         return 0
@@ -490,26 +536,31 @@ def trendyol_iscisi(urunler, simdi):
                 sayfa.on("response", topla)
 
                 kartlar = {}
-                try:
-                    sayfa.goto(url, timeout=60000, wait_until="domcontentloaded")
+                for deneme in (1, 2):   # bos kabuk ruleti sigortasi
                     try:
-                        sayfa.wait_for_selector("a.product-card", timeout=15000)
-                    except Exception:
-                        pass
-                    sayfa.wait_for_timeout(1500)
-                    sayfa.evaluate("window.scrollTo(0, 3000)")
-                    sayfa.wait_for_timeout(2500)
-                    kartlar = kart_bilgileri(sayfa.content())
-                except Exception as h:
-                    print(f"    HATA: {h}")
+                        sayfa.goto(url, timeout=60000, wait_until="domcontentloaded")
+                        try:
+                            sayfa.wait_for_selector("a.product-card", timeout=15000)
+                        except Exception:
+                            pass
+                        sayfa.wait_for_timeout(1500)
+                        sayfa.evaluate("window.scrollTo(0, 3000)")
+                        sayfa.wait_for_timeout(2500)
+                        kartlar = kart_bilgileri(sayfa.content())
+                    except Exception as h:
+                        print(f"    HATA: {h}")
+                    if kartlar:
+                        break
+                    if deneme == 1:
+                        sayfa.wait_for_timeout(3000)
                 sayfa.close()
 
                 yeni = 0
-                for n, (f, ad, curl) in kartlar.items():
+                for n, (f, ad, curl, lst) in kartlar.items():
                     if n in no_map:
-                        yeni += isle(n, f, mag["satici"])
+                        yeni += isle(n, f, mag["satici"], liste=lst)
                         continue
-                    ad_g = ad or model_adi(curl)  # ad okunamadiysa linkten uret
+                    ad_g = ad or model_adi(curl)
                     sinif = sinifla(ad_g)
                     if (f is not None and f >= TABAN_FIYAT and curl
                             and curl not in haric_kume and n not in islenen
@@ -519,18 +570,19 @@ def trendyol_iscisi(urunler, simdi):
                         sonuclar.append(kayit_yap(simdi, mag.get("marka", ""),
                                                   seri, ad_g, hacim, tur,
                                                   "Trendyol", f, "ok", curl,
-                                                  mag["satici"], sinif=sinif))
+                                                  mag["satici"], sinif=sinif,
+                                                  liste=lst))
                         islenen.add(n)
                         yeni += 1
-                for govde in cv_cevaplar:
+                for govde_cv in cv_cevaplar:
                     try:
-                        veri = json.loads(govde)
+                        veri = json.loads(govde_cv)
                     except json.JSONDecodeError:
                         continue
-                    for liste in veri.values():
-                        if not isinstance(liste, list):
+                    for liste_cv in veri.values():
+                        if not isinstance(liste_cv, list):
                             continue
-                        for it in liste:
+                        for it in liste_cv:
                             if isinstance(it, dict):
                                 yeni += isle(str(it.get("id") or ""),
                                              cv_fiyat(it.get("price")),
@@ -570,7 +622,7 @@ def trendyol_iscisi(urunler, simdi):
                     time.sleep(random.uniform(2, 4))
                     continue
                 icerik = sayfa.content()
-                fiyat = trendyol_winner_fiyat(icerik)
+                fiyat, liste = trendyol_winner_fiyat(icerik)
                 kaynak = "winner"
                 if fiyat is None:
                     fiyat = trendyol_ldjson_fiyat(icerik)
@@ -585,7 +637,8 @@ def trendyol_iscisi(urunler, simdi):
                 satici = dom_satici_bul(icerik)
                 if fiyat is not None:
                     sonuclar.append(eski_kayit(u, simdi, fiyat, "ok",
-                                               varyant=model, satici=satici))
+                                               varyant=model, satici=satici,
+                                               liste=liste))
                 else:
                     sonuclar.append(eski_kayit(u, simdi, None, "fiyat_bulunamadi",
                                                varyant=model))
@@ -602,26 +655,10 @@ def trendyol_iscisi(urunler, simdi):
     return sonuclar
 
 
-# ---------------- DOSYAYA YAZMA ----------------
-
-def dosyaya_ekle(dosya, kayitlar):
-    if not kayitlar:
-        return
-    try:
-        with open(dosya, "r", encoding="utf-8") as f:
-            bos = f.readline().strip() == ""
-    except FileNotFoundError:
-        bos = True
-    with open(dosya, "a", newline="", encoding="utf-8") as f:
-        y = csv.DictWriter(f, fieldnames=SUTUNLAR)
-        if bos:
-            y.writeheader()
-        y.writerows(kayitlar)
-
+# ---------------- ARSIVLEME + DOSYAYA YAZMA ----------------
 
 def arsivle(dosya):
-    """Ay degistiginde onceki ay(lar)in kayitlarini arsiv/ altina tasir;
-    ana dosyada yalnizca icinde bulunulan ayin kayitlari kalir."""
+    """Ay degistiginde onceki ay(lar)in kayitlarini arsiv/ altina tasir."""
     import os
     ay = datetime.now(TURKIYE_SAATI).strftime("%Y-%m")
     try:
@@ -656,6 +693,21 @@ def arsivle(dosya):
     print(f"[arsiv] {dosya}: {len(eskiler)} kayit arsive tasindi")
 
 
+def dosyaya_ekle(dosya, kayitlar):
+    if not kayitlar:
+        return
+    try:
+        with open(dosya, "r", encoding="utf-8") as f:
+            bos = f.readline().strip() == ""
+    except FileNotFoundError:
+        bos = True
+    with open(dosya, "a", newline="", encoding="utf-8") as f:
+        y = csv.DictWriter(f, fieldnames=SUTUNLAR)
+        if bos:
+            y.writeheader()
+        y.writerows(kayitlar)
+
+
 def main():
     simdi = datetime.now(TURKIYE_SAATI).strftime("%Y-%m-%d %H:%M")
     arsivle(ANA_DOSYA)
@@ -678,13 +730,11 @@ def main():
         for k in KESIF:
             if k["tip"] == "shopify":
                 isler.append(havuz.submit(shopify_kesif, k, simdi, haric, gorulenler))
-            elif k["tip"] == "nextdata":
-                isler.append(havuz.submit(nextdata_kesif, k, simdi, haric, gorulenler))
+        isler.append(havuz.submit(kidsnjoy_iscisi, simdi, haric, gorulenler))
         isler.append(havuz.submit(trendyol_iscisi, trendyol_urunleri, simdi))
         for is_ in isler:
             tum.extend(is_.result())
 
-    # kayit siniflarina gore ayir
     # kayit siniflarina gore ayir (yetiskin.csv istisnalari uygulanir)
     yetiskin_zorla = yetiskin_listesi()
     ana_kayitlar, yetiskin_kayitlar = [], []
@@ -695,7 +745,7 @@ def main():
             sinif = "yetiskin"
         (yetiskin_kayitlar if sinif == "yetiskin" else ana_kayitlar).append(kayit)
 
-    # bu turda gorunmeyenler -> satista_degil (her dosya kendi gecmisine gore)
+    # bu turda gorunmeyenler -> satista_degil (bir kez yazilir)
     for oncekiler, hedef in ((onceki_ana, ana_kayitlar),
                              (onceki_yet, yetiskin_kayitlar)):
         kayip = 0
@@ -704,8 +754,7 @@ def main():
                 hedef.append({
                     "tarih": simdi, "marka": eski["marka"],
                     "seri_adi": eski["seri_adi"], "varyant": eski["varyant"],
-                    "kategori1": eski.get("kategori1", ""),
-                    "hacim": eski["hacim"],
+                    "kategori1": "", "hacim": eski["hacim"],
                     "kategori2": eski.get("kategori2", ""),
                     "platform": eski["platform"], "fiyat": "",
                     "durum": "satista_degil", "url": url,
