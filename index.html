@@ -509,7 +509,7 @@ function detaySatiri(d, g) {
   }
   if (d.fiyat && g.fiyat && !g.cokFiyatli && parseFloat(g.fiyat) > 0 && d.fiyat !== g.fiyat) {
     const oran = (parseFloat(d.fiyat) - parseFloat(g.fiyat)) / parseFloat(g.fiyat) * 100;
-    yuzdeH = ` <span class="rozet ${oran < 0 ? "dusus" : "artis"}">${oran < 0 ? "-" : "+"}%${Math.abs(oran).toFixed(0)}</span>`;
+    yuzdeH += ` <span class="rozet ${oran < 0 ? "dusus" : "artis"}">${oran < 0 ? "-" : "+"}%${Math.abs(oran).toFixed(0)}</span>`;
   }
   const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
   const gBtn = `<button class="btnMini grafikBtn" data-kim="${encodeURIComponent(kimlik(d))}"
