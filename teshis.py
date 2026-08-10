@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-# TESHIS ARACI - surum 14
-# Amac: sipnjoylife neden NEXT_DATA vermiyor?
+# TESHIS ARACI - surum 15
+# Amac: kidsnjoystore.com urun listesi yapisini gormek
 
 import re
 import requests
@@ -13,19 +13,21 @@ BASLIKLAR = {
 
 
 def main():
-    r = requests.get("https://www.sipnjoylife.com", headers=BASLIKLAR, timeout=30)
-    print("durum kodu:", r.status_code)
-    print("boyut:", len(r.text), "karakter")
-    print("NEXT_DATA var mi:", "__NEXT_DATA__" in r.text)
-    print("nuxt var mi:", "__NUXT__" in r.text)
-    print("cloudflare/challenge ipucu:",
-          any(k in r.text.lower() for k in ("cloudflare", "challenge", "captcha",
-                                            "attention required", "just a moment")))
-    print("\n--- ILK 600 KARAKTER ---")
-    print(r.text[:600])
-    print("\n--- script id gecen satirlar ---")
-    for m in re.findall(r'<script[^>]*id="[^"]*"[^>]*>', r.text)[:8]:
-        print(m[:120])
+    ana = requests.get("https://kidsnjoystore.com", headers=BASLIKLAR, timeout=30).text
+    print("ana sayfa:", len(ana), "karakter")
+    linkler = sorted(set(re.findall(
+        r'href="(https?://kidsnjoystore\.com/[^"]*(?:termos|suluk|matara|urun|kategori)[^"]*)"',
+        ana, re.I)))
+    for l in linkler[:10]:
+        print("aday liste linki:", l)
+    hedef = linkler[0] if linkler else "https://kidsnjoystore.com"
+    liste = requests.get(hedef, headers=BASLIKLAR, timeout=30).text
+    print("\nliste sayfasi:", hedef, "->", len(liste), "karakter")
+    print("productItem adedi:", liste.count("productItem"))
+    i = liste.find('class="productItem')
+    if i > 0:
+        print("\n--- ILK URUN KARTI (1500 kr) ---")
+        print(liste[max(0, i - 200):i + 1300])
 
 
 if __name__ == "__main__":
