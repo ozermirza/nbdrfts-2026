@@ -585,14 +585,14 @@ function ciz() {
       data-grup="${encodeURIComponent(g.anahtar)}"
       data-ad="${(g.marka + " " + g.seri_adi + " " + g.hacim + " grup fiyatı").replace(/"/g, "&quot;")}">📈</button>`;
     const zamH = g.kategoriZam
-      ? ` <span class="rozet artis">kategori fiyat artışı ▲ ${tl(g.kategoriZam.eski)} → ${tl(g.kategoriZam.yeni)}</span>`
+      ? ` <span class="rozet artis">gruba zam yapıldı ▲ ${tl(g.kategoriZam.eski)} → ${tl(g.kategoriZam.yeni)}</span>`
       : "";
     let satirlar = `<tr>
       <td><button class="acButon" data-g="${g.anahtar}">${acik ? "▾" : "▸"}</button>${g.marka}</td>
       <td>${g.seri_adi}</td><td>${g.hacim}</td>
       <td>${g.platform}</td>
-      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}${zamH}</td>
-      <td>${detayNotu}</td>
+      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}</td>
+      <td>${zamH}${zamH && detayNotu ? " " : ""}${detayNotu}</td>
       <td>${g.kategoriZam ? kisaTarih(g.kategoriZam.an) : ""}</td>
     </tr>`;
     detaylar.forEach(d => satirlar += detaySatiri(d, g));
