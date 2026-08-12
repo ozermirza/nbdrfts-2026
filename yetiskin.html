@@ -279,7 +279,7 @@ function degisimAni(k) {
   return h[i + 1].tarih;
 }
 
-function kapanmaAni(k, grupFiyati) {
+function kapanmaAni(k, grupFiyati, gk) {
   if (!k.fiyat || !grupFiyati) return null;
   if (parseFloat(k.fiyat) < parseFloat(grupFiyati)) return null;
   const h = gecmis.get(kimlik(k));
@@ -288,6 +288,10 @@ function kapanmaAni(k, grupFiyati) {
   while (i >= 0 && h[i].fiyat === k.fiyat) i--;
   if (i < 0) return null;
   if (parseFloat(h[i].fiyat) >= parseFloat(k.fiyat)) return null;
+  // eski fiyat, O GUNKU grup moduna gore gercekten indirimli miydi?
+  // (degilse bu bir zam yukselisidir, "indirim kapandi" denmez)
+  const eskiMod = sonDeger(grupGecmis.get(gk) || [], zaman(h[i].tarih));
+  if (!eskiMod || parseFloat(h[i].fiyat) >= parseFloat(eskiMod.fiyat)) return null;
   const an = h[i + 1].tarih;
   return (sonTurZamani - zaman(an)) <= 48 * 3600 * 1000 ? an : null;
 }
@@ -390,7 +394,7 @@ async function baslat() {
     const mod = Object.keys(sayac).sort((a, b) => sayac[b] - sayac[a])[0] || null;
     const cokFiyatli = fiyatli.length >= 4 &&
       (sayac[mod] || 0) < fiyatli.length / 2;   // mod cogunlugu temsil etmiyor
-    anaUyeler.forEach(u => u.kapandi = cokFiyatli ? null : kapanmaAni(u, mod));
+    anaUyeler.forEach(u => u.kapandi = cokFiyatli ? null : kapanmaAni(u, mod, anahtar));
     const istisnalar = cokFiyatli
       ? anaUyeler.filter(u => u.yon || u.kapandi)
       : anaUyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon || u.kapandi);
