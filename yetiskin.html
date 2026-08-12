@@ -306,7 +306,7 @@ function kategoriZam(gk, mod) {
   if (i < 0) return null;
   if (parseFloat(h[i].fiyat) >= parseFloat(son)) return null;
   const an = h[i + 1].tarih;
-  if ((sonTurZamani - zaman(an)) > 48 * 3600 * 1000) return null;
+  if ((sonTurZamani - zaman(an)) > 120 * 3600 * 1000) return null;   // 5 gun
   return { an, eski: h[i].fiyat, yeni: son };
 }
 
