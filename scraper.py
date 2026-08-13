@@ -68,7 +68,7 @@ KIDSNJOY = {
 }
 
 # ---- TRENDYOL MAGAZALARI ----
-    MAGAZALAR = [
+MAGAZALAR = [
     {"ad": "PopCorner-Trixie", "marka": "Trixie", "satici": "Pop Corner",
      "taban": "https://www.trendyol.com/sr?wb=103069&lc=103714%2C1193&os=1&mid=849084"},
     {"ad": "SipnJoy", "marka": "Sipnjoy", "satici": "SipnJoy",
