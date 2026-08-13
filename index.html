@@ -403,6 +403,16 @@ async function baslat() {
     const mod = Object.keys(sayac).sort((a, b) => sayac[b] - sayac[a])[0] || null;
     const cokFiyatli = fiyatli.length >= 4 &&
       (sayac[mod] || 0) < fiyatli.length / 2;   // mod cogunlugu temsil etmiyor
+    // gosterilen grup fiyati: uyenin etiket fiyati (kategori1) varsa o,
+    // yoksa satis fiyati; modu alinir. Rozetler/grafik satis moduna bagli kalir.
+    const refSayac = {};
+    fiyatli.forEach(u => {
+      const lf = parseFloat(u.kategori1);
+      const ref = (lf > 0 && lf > parseFloat(u.fiyat)) ? String(lf) : u.fiyat;
+      refSayac[ref] = (refSayac[ref] || 0) + 1;
+    });
+    const gosterFiyat = Object.keys(refSayac)
+      .sort((a, b) => refSayac[b] - refSayac[a])[0] || null;
     anaUyeler.forEach(u => u.kapandi = cokFiyatli ? null : kapanmaAni(u, mod, anahtar));
     const istisnalar = cokFiyatli
       ? anaUyeler.filter(u => u.yon || u.kapandi)
@@ -411,7 +421,7 @@ async function baslat() {
       anahtar,
       marka: ilk.marka, seri_adi: ilk.seri_adi, hacim: ilk.hacim,
       platform: ilk.platform, tur: (ilk.kategori2 || "").toLowerCase(),
-      fiyat: mod, adet: anaUyeler.length, cokFiyatli,
+      fiyat: mod, gosterFiyat, adet: anaUyeler.length, cokFiyatli,
       minF: fiyatli.length ? Math.min(...fiyatli.map(u => parseFloat(u.fiyat))) : null,
       maxF: fiyatli.length ? Math.max(...fiyatli.map(u => parseFloat(u.fiyat))) : null,
       kategoriZam: cokFiyatli ? null : kategoriZam(anahtar, mod),
@@ -422,7 +432,7 @@ async function baslat() {
   });
 
   document.getElementById("sonGuncelleme").textContent =
-    "Son güncelleme: " + sonTur + " · robot saat başı tarar (00-06 hariç)";
+    "Son güncelleme: " + sonTur + " · robot her saat XX:23'te tarar (01-05 hariç)";
 
   document.getElementById("fAra").addEventListener("input", ciz);
   document.getElementById("fDegisen").addEventListener("input", ciz);
@@ -490,6 +500,7 @@ function panelCiz() {
 
 function detaySatiri(d, g) {
   let rozet = "", tarihH = "";
+  const gf = g.gosterFiyat || g.fiyat;   // uye kiyaslari gosterilen fiyata gore
   const an = kisaTarih(degisimAni(d));
   if (d.kapandi) {
     rozet = `<span class="rozet kapandi">indirim kapandı</span>`;
@@ -500,9 +511,10 @@ function detaySatiri(d, g) {
   } else if (d.yon === "artis") {
     rozet = `<span class="rozet artis">▲ ${tl(d.oncekiFiyat)} → ${tl(d.fiyat)}</span>`;
     tarihH = an || "";
-  } else if (d.fiyat && g.fiyat && !g.cokFiyatli && d.fiyat !== g.fiyat) {
-    const dus = parseFloat(d.fiyat) < parseFloat(g.fiyat);
-    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(g.fiyat)} → ${tl(d.fiyat)}</span>`;
+  } else if (d.fiyat && gf && !g.cokFiyatli
+             && parseFloat(d.fiyat) !== parseFloat(gf)) {
+    const dus = parseFloat(d.fiyat) < parseFloat(gf);
+    rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(gf)} → ${tl(d.fiyat)}</span>`;
     tarihH = an || "";
   }
   let yuzdeH = "";
@@ -511,9 +523,11 @@ function detaySatiri(d, g) {
     const ind = (1 - parseFloat(d.fiyat) / listeF) * 100;
     yuzdeH += ` <span class="rozet liste" title="satıcı etiket fiyatı ${tl(listeF)}">-%${ind.toFixed(0)} etiket</span>`;
   }
-  if (d.fiyat && g.fiyat && !g.cokFiyatli && parseFloat(g.fiyat) > 0 && d.fiyat !== g.fiyat) {
-    const oran = (parseFloat(d.fiyat) - parseFloat(g.fiyat)) / parseFloat(g.fiyat) * 100;
-    yuzdeH = ` <span class="rozet ${oran < 0 ? "dusus" : "artis"}">${oran < 0 ? "-" : "+"}%${Math.abs(oran).toFixed(0)}</span>`;   // satirda tek yuzde: grup konumu oncelikli, etiket tooltip'te
+  if (d.fiyat && gf && !g.cokFiyatli && parseFloat(gf) > 0
+      && parseFloat(d.fiyat) !== parseFloat(gf)) {
+    const oran = (parseFloat(d.fiyat) - parseFloat(gf)) / parseFloat(gf) * 100;
+    const ipucu = (listeF > 0) ? ` title="satıcı etiket fiyatı ${tl(listeF)}"` : "";
+    yuzdeH = ` <span class="rozet ${oran < 0 ? "dusus" : "artis"}"${ipucu}>${oran < 0 ? "-" : "+"}%${Math.abs(oran).toFixed(0)}</span>`;   // satirda tek yuzde: grup konumu oncelikli, etiket tooltip'te
   }
   const saticiHtml = d.satici ? `<span class="saticiEtiket">${d.satici}</span>` : "";
   const gBtn = `<button class="btnMini grafikBtn" data-kim="${encodeURIComponent(kimlik(d))}"
@@ -546,8 +560,8 @@ function ciz() {
     kayitSay += uyeler.length;
     hatali += uyeler.filter(u => u.durum !== "ok").length;
     g.anaUyeler.forEach(u => {
-      if (!u.fiyat || !g.fiyat || g.cokFiyatli || !anaMi(u.satici)) return;
-      const f = parseFloat(u.fiyat), m = parseFloat(g.fiyat);
+      if (!u.fiyat || !(g.gosterFiyat || g.fiyat) || g.cokFiyatli || !anaMi(u.satici)) return;
+      const f = parseFloat(u.fiyat), m = parseFloat(g.gosterFiyat || g.fiyat);
       if (f < m || u.yon === "dusus") indirimli++;
       else if (f > m || u.yon === "artis") grupUstu++;
     });
@@ -572,10 +586,16 @@ function ciz() {
 
   document.getElementById("tabloGovde").innerHTML = liste.map(g => {
     const acik = acikGruplar.has(g.anahtar);
+    const gf = g.gosterFiyat || g.fiyat;
+    let grupIndH = "";
+    if (!g.cokFiyatli && g.fiyat && gf && parseFloat(g.fiyat) < parseFloat(gf)) {
+      const gi = (1 - parseFloat(g.fiyat) / parseFloat(gf)) * 100;
+      grupIndH = ` <span class="rozet dusus" title="güncel satış fiyatı modu ${tl(g.fiyat)} — etiket fiyatına göre indirim">-%${gi.toFixed(0)}</span>`;
+    }
     const fiyatH = g.cokFiyatli
       ? `<a href="${g.url}" target="_blank">${tl(g.minF)} – ${tl(g.maxF)}</a>`
-      : (g.fiyat
-        ? `<a href="${g.url}" target="_blank">${tl(g.fiyat)}</a>`
+      : (gf
+        ? `<a href="${g.url}" target="_blank">${tl(gf)}</a>`
         : `<span class="hata">${g.durum}</span>`);
     const detaylar = acik ? g.anaUyeler : g.istisnalar;
     const detayNotu = acik
@@ -591,7 +611,7 @@ function ciz() {
       <td><button class="acButon" data-g="${g.anahtar}">${acik ? "▾" : "▸"}</button>${g.marka}</td>
       <td>${g.seri_adi}</td><td>${g.hacim}</td>
       <td>${g.platform}</td>
-      <td class="fiyat">${fiyatH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}</td>
+      <td class="fiyat">${fiyatH}${grupIndH} <span class="adet">(${g.adet} varyant)</span>${grupGBtn}</td>
       <td>${zamH}${zamH && detayNotu ? " " : ""}${detayNotu}</td>
       <td>${g.kategoriZam ? kisaTarih(g.kategoriZam.an) : ""}</td>
     </tr>`;
