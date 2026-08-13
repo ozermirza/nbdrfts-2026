@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 19)
+# FIYAT RADARI - scraper.py (surum 20)
+# 20: PopCorner-Trixie magazasi acildi (wb=103069'lu URL GitHub'dan okunuyor,
+#     13 Agustos teshisiyle kanitlandi; 32 urun p-no ile eslesir, kesif acik)
 # 19: kidsnjoy ?sayfa= dongusu + Trendyol magazalarina taze baglam
 # Yenilikler (surum 17'ye gore):
 #   - sipnjoylife kesfi EMEKLI: site kidsnjoystore.com'a tasindi (Ticimax).
@@ -67,8 +69,9 @@ KIDSNJOY = {
 
 # ---- TRENDYOL MAGAZALARI ----
 MAGAZALAR = [
-    # {"ad": "PopCorner-Trixie", "marka": "Trixie", "satici": "Pop Corner",
-    #  "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=849084"},
+    MAGAZALAR = [
+    {"ad": "PopCorner-Trixie", "marka": "Trixie", "satici": "Pop Corner",
+     "taban": "https://www.trendyol.com/sr?wb=103069&lc=103714%2C1193&os=1&mid=849084"},
     {"ad": "SipnJoy", "marka": "Sipnjoy", "satici": "SipnJoy",
      "taban": "https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid=1095234"},
     {"ad": "Mareas-CoolBottles", "marka": "Cool Bottles", "satici": "Mareas",
