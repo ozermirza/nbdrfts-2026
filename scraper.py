@@ -45,7 +45,7 @@ TABAN_FIYAT = 500   # bu tutarin alti hatali sayilir
 # Kural sirasi: HARIC -> SERI (bilinen cocuk serisi her zaman 'ana') ->
 # YETISKIN kelimeleri -> DAHIL kelimeleri. Hacim KULLANILMAZ.
 DAHIL_KELIMELER = ["matara", "termos", "suluk", "bottle", "şişe", "sise"]
-HARIC_KELIMELER = ["tritan", "yemek", "food", "beslenme", "mama", "alıştırma", "360°", "Pipetli Su Şişesi 300 ml"]
+HARIC_KELIMELER = ["tritan", "yemek", "food", "beslenme", "mama", "alıştırma", "360°", "pipetli su şişesi 300 ml"]
 YETISKIN_KELIMELER = ["tumbler", "mug", "kupa", "yetişkin", "yetiskin"]
 SERILER = ["FlipSip", "SippyPals", "WideWonder", "SipSquad", "Lil'Straw",
            "Handlehug", "StrawBuddy"]
