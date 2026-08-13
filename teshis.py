@@ -1,107 +1,133 @@
 # -*- coding: utf-8 -*-
-# TESHIS ARACI - surum 19
-# Amac: Hepsiburada Mareas magazasini (Cool Bottles) GitHub'dan okumayi
-#       denemek. Bilinen durum: HB veri merkezi IP'lerine 403 basar,
-#       yerelde sadece GORUNUR pencere geciyor. Yeni koz: TEST 4'te
-#       sanal ekran (xvfb) ile "gorunur" tarayici denenir.
-#       NOT: TEST 4 icin teshis.yml'de calistirma satiri
-#       "xvfb-run --auto-servernum python teshis.py" olmali.
-#
-# TEST 1: duz requests (durum kodu + duvar tespiti)
-# TEST 2: Playwright headless + cerez + masaustu UA
-# TEST 3: Playwright headless + mobil UA
-# TEST 4: Playwright headed (xvfb sanal ekranda gorunur pencere)
+# TESHIS ARACI - surum 20
+# Amac: HB'nin GitHub'dan xvfb ile okunmasinin ISTIKRAR SINAVI.
+# hb_robot.py surum 5'in magaza tarama mantiginin aynisiyla iki magaza
+# (SipnJoy + Mareas/CoolBottles) taranir, sonuclar deneme_hb.csv'ye
+# EKLENIR (her tetiklemede ustune yazar, turlar karsilastirilir).
+# NOT: teshis.yml'de xvfb-run + contents:write + commit adimi olmali.
 
+import csv
+import random
 import re
 import time
+from datetime import datetime, timezone, timedelta
 
-import requests
+TABAN_FIYAT = 500
+TURKIYE_SAATI = timezone(timedelta(hours=3))
+CIKTI = "deneme_hb.csv"
 
-MAGAZA_URL = ("https://www.hepsiburada.com/magaza/mareas"
-              "?markalar=coolbottles&tab=allproducts")
-
-UA_MASA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-           "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
-UA_MOBIL = ("Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36")
-
-
-def kart_say(icerik):
-    """HB magaza kartlari: '-pm-HB' (ve olasi '-p-HB') linkleri."""
-    return len(set(re.findall(r'href="[^"]*-pm?-(HB[A-Z0-9]{8,})', icerik)))
-
-
-def ozet(icerik):
-    metin = re.sub(r"<script.*?</script>", " ", icerik, flags=re.S)
-    metin = re.sub(r"<style.*?</style>", " ", metin, flags=re.S)
-    metin = re.sub(r"<[^>]+>", " ", metin)
-    metin = re.sub(r"\s+", " ", metin).strip()
-    return metin[:200]
+MAGAZALAR = [
+    {"ad": "SipnJoy",
+     "taban": ("https://www.hepsiburada.com/magaza/sipnjoy"
+               "?filtreler=MainCategory.Id:367285,21005100&tab=allproducts")},
+    {"ad": "Mareas-CoolBottles",
+     "taban": ("https://www.hepsiburada.com/magaza/mareas"
+               "?markalar=coolbottles&tab=allproducts")},
+]
 
 
-def test1_requests():
-    print("\n===== TEST 1: duz requests =====")
-    try:
-        r = requests.get(MAGAZA_URL, timeout=30,
-                         headers={"User-Agent": UA_MASA,
-                                  "Accept-Language": "tr-TR,tr;q=0.9"})
-        print(f"durum={r.status_code}  boyut={len(r.text)//1024}KB  "
-              f"kart={kart_say(r.text)}")
-        print(f"gorunur metin: {ozet(r.text)}")
-    except Exception as h:
-        print(f"HATA: {h}")
+def hb_urun_kodu(url):
+    m = re.search(r"(HB[A-Z0-9]{8,})", (url or "").upper())
+    return m.group(1) if m else None
 
 
-def playwright_dene(etiket, ua, headless, deneme_sayisi=2):
-    from playwright.sync_api import sync_playwright
-    print(f"\n===== {etiket} =====")
-    try:
-        with sync_playwright() as p:
-            tarayici = p.chromium.launch(headless=headless)
-            for deneme in range(1, deneme_sayisi + 1):
-                baglam = tarayici.new_context(locale="tr-TR", user_agent=ua)
-                sayfa = baglam.new_page()
-                try:
-                    sayfa.goto(MAGAZA_URL, timeout=60000,
-                               wait_until="domcontentloaded")
-                    sayfa.wait_for_timeout(5000)
-                    sayfa.evaluate("window.scrollTo(0, 3000)")
-                    sayfa.wait_for_timeout(3000)
-                    icerik = sayfa.content()
-                    kk = kart_say(icerik)
-                    engel = ("erişim engellendi" in icerik.lower()
-                             or "captcha" in icerik.lower())
-                    print(f"deneme {deneme}: boyut={len(icerik)//1024}KB  "
-                          f"kart={kk}  engel={'EVET' if engel else 'yok'}")
-                    if kk:
-                        adlar = re.findall(r'title="([^"]{10,80})"', icerik)
-                        for ad in adlar[:5]:
-                            print(f"  kart adi: {ad}")
-                        sayfa.close(); baglam.close()
-                        break
-                    print(f"  gorunur metin: {ozet(icerik)}")
-                    print(f"  son url: {sayfa.url[:100]}")
-                except Exception as h:
-                    print(f"deneme {deneme}: HATA {h}")
-                sayfa.close(); baglam.close()
-                time.sleep(5)
-            tarayici.close()
-    except Exception as h:
-        print(f"BASLATILAMADI: {h}")
-        if not headless:
-            print("  (xvfb yok gibi — teshis.yml'de xvfb-run kullanildigindan"
-                  " emin olun)")
+def metin_fiyat(metin):
+    """hb_robot.py ile ayni: taksit/kupon/uzeri kaliplari elenir,
+    taban ustu en dusuk deger alinir."""
+    if not metin:
+        return None
+    temiz = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", metin)
+    temiz = re.sub(r"\d[\d.,]*\s*TL\s*(ve|üzeri|uzeri)", " ", temiz)
+    adaylar = [float(m.replace(".", "").replace(",", "."))
+               for m in re.findall(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", temiz)]
+    adaylar = [a for a in adaylar if a >= TABAN_FIYAT]
+    return min(adaylar) if adaylar else None
+
+
+def magaza_tara(sayfa, mag):
+    """hb_robot.py magaza_tara'nin aynisi; {kod: (fiyat, ad, url)} dondurur."""
+    kartlar = {}
+    for no in range(1, 6):
+        ek = f"&sayfa={no}" if no > 1 else ""
+        try:
+            sayfa.goto(mag["taban"] + ek, timeout=60000,
+                       wait_until="domcontentloaded")
+            sayfa.wait_for_timeout(4000)
+            sayfa.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            sayfa.wait_for_timeout(2500)
+        except Exception as h:
+            print(f"  [{mag['ad']}] sayfa {no}: acilamadi ({h})")
+            break
+        if "erişim engellendi" in sayfa.content().lower():
+            print(f"  [{mag['ad']}] sayfa {no}: ENGELLENDI")
+            break
+        ham = sayfa.eval_on_selector_all(
+            "a[href*='-pm-HB'], a[href*='-p-HB']",
+            """els => els.map(e => {
+                const kap = e.closest('li') || e.closest('article') || e;
+                const img = kap.querySelector('img[alt]');
+                return {href: e.href,
+                        baslik: e.getAttribute('title')
+                                || (img ? img.getAttribute('alt') : '') || '',
+                        metin: (kap.innerText || '').slice(0, 400)};
+            })""")
+        yeni = 0
+        for k in ham:
+            kod = hb_urun_kodu(k["href"])
+            if not kod or kod in kartlar:
+                continue
+            url = k["href"].split("?")[0]
+            ad = (k["baslik"] or k["metin"].split("\n")[0]).strip()
+            f = metin_fiyat(k["metin"])
+            kartlar[kod] = (f, ad, url)
+            yeni += 1
+        print(f"  [{mag['ad']}] sayfa {no}: {len(ham)} baglanti, {yeni} yeni "
+              f"(toplam {len(kartlar)})")
+        if yeni == 0:
+            break
+        time.sleep(random.uniform(2, 3))
+    return kartlar
 
 
 def main():
-    test1_requests()
-    playwright_dene("TEST 2: Playwright headless + masaustu UA",
-                    UA_MASA, headless=True)
-    playwright_dene("TEST 3: Playwright headless + mobil UA",
-                    UA_MOBIL, headless=True)
-    playwright_dene("TEST 4: Playwright GORUNUR (xvfb sanal ekran)",
-                    UA_MASA, headless=False)
-    print("\nTeshis bitti.")
+    from playwright.sync_api import sync_playwright
+    simdi = datetime.now(TURKIYE_SAATI).strftime("%Y-%m-%d %H:%M")
+    satirlar = []
+    with sync_playwright() as p:
+        tarayici = p.chromium.launch(headless=False)   # xvfb sanal ekranda
+        baglam = tarayici.new_context(
+            locale="tr-TR",
+            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/126.0.0.0 Safari/537.36"))
+        sayfa = baglam.new_page()
+        for mag in MAGAZALAR:
+            print(f"\n===== {mag['ad']} =====")
+            kartlar = magaza_tara(sayfa, mag)
+            fiyatli = sum(1 for f, _, _ in kartlar.values() if f is not None)
+            print(f"  SONUC [{mag['ad']}]: {len(kartlar)} kart, "
+                  f"{fiyatli} fiyatli")
+            for kod, (f, ad, url) in kartlar.items():
+                satirlar.append({"tarih": simdi, "magaza": mag["ad"],
+                                 "kod": kod, "ad": ad,
+                                 "fiyat": f if f is not None else "",
+                                 "url": url})
+            time.sleep(random.uniform(3, 5))
+        tarayici.close()
+
+    try:
+        with open(CIKTI, encoding="utf-8") as f:
+            bos = not f.read().strip()
+    except FileNotFoundError:
+        bos = True
+    with open(CIKTI, "a", encoding="utf-8", newline="") as f:
+        y = csv.DictWriter(f, fieldnames=["tarih", "magaza", "kod", "ad",
+                                          "fiyat", "url"],
+                           lineterminator="\n")
+        if bos:
+            y.writeheader()
+        y.writerows(satirlar)
+    print(f"\nTeshis bitti: {len(satirlar)} satir {CIKTI} dosyasina eklendi.")
 
 
 if __name__ == "__main__":
