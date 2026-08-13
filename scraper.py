@@ -599,6 +599,9 @@ def trendyol_iscisi(urunler, simdi):
                                                   liste=lst))
                         islenen.add(n)
                         yeni += 1
+                    elif n not in islenen:
+                        print(f"    [atlandi] p-{n} fiyat={f} sinif={sinif} "
+                              f"ad={ad_g[:45]}")
                 for govde_cv in cv_cevaplar:
                     try:
                         veri = json.loads(govde_cv)
