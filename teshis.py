@@ -18,10 +18,10 @@ import time
 import requests
 
 MID = "849084"   # Pop Corner
-SR_URL = f"https://www.trendyol.com/sr?lc=103714%2C1193&os=1&mid={MID}"
-SR_URL_LCSIZ = f"https://www.trendyol.com/sr?os=1&mid={MID}"
+SR_URL = f"https://www.trendyol.com/sr?wb=103069&lc=103714%2C1193&os=1&mid={MID}"
+SR_URL_LCSIZ = f"https://www.trendyol.com/sr?wb=103069&os=1&mid={MID}"
 API_URL = ("https://apigw.trendyol.com/discovery-web-searchgw-service/v2/api/"
-           f"infinite-scroll/sr?lc=103714,1193&os=1&mid={MID}"
+           f"infinite-scroll/sr?wb=103069&lc=103714,1193&os=1&mid={MID}"
            "&pi=1&culture=tr-TR&storefrontId=1")
 
 UA_MASA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
