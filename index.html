@@ -486,11 +486,10 @@ async function baslat() {
     const gosterFiyat = Object.keys(refSayac)
       .sort((a, b) => refSayac[b] - refSayac[a])[0] || null;
     anaUyeler.forEach(u => u.kapandi = cokFiyatli ? null : kapanmaAni(u, mod, anahtar));
+    // satistan kalkanlar kapali gorunumde SAKLANIR, grup acilinca gorunur
     const istisnalar = cokFiyatli
-      ? anaUyeler.filter(u => u.yon || u.kapandi || u.yeniAn
-                              || (!u.fiyat && u.durumBas))
-      : anaUyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon || u.kapandi
-                              || u.yeniAn || (!u.fiyat && u.durumBas));
+      ? anaUyeler.filter(u => u.yon || u.kapandi)
+      : anaUyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon || u.kapandi);
     return {
       anahtar,
       marka: ilk.marka, seri_adi: ilk.seri_adi, hacim: ilk.hacim,
@@ -516,34 +515,28 @@ async function baslat() {
     return `${on}${ad} · ${kb.platform}`;
   };
   const olaylar = [];
-  const toplu = new Map();   // ayni grup + ayni degisim + ayni tur -> tek satir
+  // marka + tur + yon bazinda TEK satir: "Trixie — 18 üründe zam" gibi.
+  // Detay merakli grup satirindaki grafikten bakar (kullanici karari, 14.08).
+  const markaToplu = new Map();
   gecmis.forEach((h, a) => {
     for (let i = 1; i < h.length; i++) {
       if (h[i].fiyat === h[i - 1].fiyat || zaman(h[i].tarih) < SON7) continue;
       const kb = kayitBilgi.get(a);
-      const gk = kb ? grupKimlik(kb) : a;
-      const anah = [gk, h[i - 1].fiyat, h[i].fiyat, h[i].tarih].join("~");
-      if (!toplu.has(anah))
-        toplu.set(anah, { an: h[i].tarih, eski: h[i - 1].fiyat,
-                          yeni: h[i].fiyat, kb, uyeler: [] });
-      toplu.get(anah).uyeler.push(a);
-    }
-  });
-  toplu.forEach(o => {
-    const artis = parseFloat(o.yeni) > parseFloat(o.eski);
-    const kim = (o.uyeler.length >= 3 && o.kb)
-      ? `${o.kb.marka} ${o.kb.seri_adi} ${o.kb.hacim} · ${o.kb.platform} — ${o.uyeler.length} ürün`
-      : adBul(o.uyeler[0]) + (o.uyeler.length > 1 ? ` (+${o.uyeler.length - 1} ürün)` : "");
-    olaylar.push({ an: o.an, tip: artis ? "zam" : "indirim",
-                   metin: `${kim}: ${tl(o.eski)} → ${tl(o.yeni)}` });
-  });
-  grupGecmis.forEach((h, gk) => {
-    for (let i = 1; i < h.length; i++) {
-      if (h[i].fiyat === h[i - 1].fiyat || zaman(h[i].tarih) < SON7) continue;
+      const marka = kb ? kb.marka : "?";
       const artis = parseFloat(h[i].fiyat) > parseFloat(h[i - 1].fiyat);
-      olaylar.push({ an: h[i].tarih, tip: artis ? "zam" : "indirim",
-        metin: `GRUP ${gk.split("|").join(" ")}: ${tl(h[i - 1].fiyat)} → ${tl(h[i].fiyat)}` });
+      const anah = [marka, h[i].tarih, artis ? "z" : "i"].join("~");
+      if (!markaToplu.has(anah))
+        markaToplu.set(anah, { an: h[i].tarih, marka, artis, uyeler: [],
+                               eski: h[i - 1].fiyat, yeni: h[i].fiyat, ilkA: a });
+      markaToplu.get(anah).uyeler.push(a);
     }
+  });
+  markaToplu.forEach(o => {
+    const tip = o.artis ? "zam" : "indirim";
+    const metin = o.uyeler.length === 1
+      ? `${adBul(o.ilkA)}: ${tl(o.eski)} → ${tl(o.yeni)}`
+      : `${o.marka} — ${o.uyeler.length} üründe ${tip}`;
+    olaylar.push({ an: o.an, tip, metin });
   });
   // "takibe girdi" olaylari KAPALI (kullanici karari, 14.08) —
   // gunlugu bogdugu icin yeni urun bildirimi uretmiyoruz.
