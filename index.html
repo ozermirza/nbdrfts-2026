@@ -641,11 +641,11 @@ function karsKur() {
       <select id="karsPlatform"></select>
       <input type="number" id="karsBenim" placeholder="24Bottles fiyat dene (TL)"
              style="width:190px">
+      <div class="karsLejant"><b style="color:var(--vurgu)">│</b> grup fiyatı
+        &nbsp; ▬ min–max satış aralığı
+        &nbsp; <b style="color:#34c07c">│</b> denediğin fiyat</div>
     </div>
-    <div id="karsCikti"></div>
-    <div class="karsLejant"><b style="color:var(--vurgu)">│</b> grup fiyatı
-      &nbsp; ▬ min–max satış aralığı
-      &nbsp; <b style="color:#34c07c">│</b> denediğin fiyat</div>`;
+    <div id="karsCikti"></div>`;
   const doldur = (id, liste, hepsiEtiketi) => {
     const e = document.getElementById(id);
     const eskiSecim = e.value;
