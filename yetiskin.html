@@ -143,7 +143,7 @@
   .gunlukKutu.acikG .gunlukListe { display: block; }
   .olay { font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--cizgi); }
   .olay:last-child { border-bottom: none; }
-  #karsIc { max-height: 520px; }
+  #karsIc { max-height: none; overflow-y: visible; }
   .karsSecim { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 0 8px; }
   .karsSecim select, .karsSecim input {
     background: var(--yuzey2); color: var(--metin); border: 1px solid var(--cizgi);
@@ -707,83 +707,75 @@ function karsCiz() {
   const benim = parseFloat(document.getElementById("karsBenim").value) || null;
   const hBaslik = [...karsSecili]
     .sort((a, b) => parseInt(a) - parseInt(b)).join(" + ");
-  const platformlar = p ? [p]
-    : [...new Set(gruplar.filter(g => karsSecili.has(g.hacim) && g.tur === t)
-                         .map(g => g.platform))].sort();
-  const paneller = [];
-  for (const plat of platformlar) {
-    const kesit = gruplar.filter(g =>
-      karsSecili.has(g.hacim) && g.tur === t && g.platform === plat);
-    const markalar = new Map();
-    kesit.forEach(g => {
-      if (!markalar.has(g.marka))
-        markalar.set(g.marka, { fiyatlar: [], referanslar: {}, adet: 0 });
-      const m = markalar.get(g.marka);
-      g.anaUyeler.forEach(u => {
-        if (!u.fiyat) return;
-        m.adet++;
-        m.fiyatlar.push(parseFloat(u.fiyat));
-        const lf = parseFloat(u.kategori1);
-        const ref = (lf > 0 && lf > parseFloat(u.fiyat)) ? String(lf) : u.fiyat;
-        m.referanslar[ref] = (m.referanslar[ref] || 0) + 1;
-      });
+  // TEK ORTAK PANEL (kullanici karari, 14.08): platform secilmediyse
+  // tum platformlar ayni havuzda; secilirse yalniz o platform.
+  const kesit = gruplar.filter(g =>
+    karsSecili.has(g.hacim) && g.tur === t && (!p || g.platform === p));
+  const markalar = new Map();
+  kesit.forEach(g => {
+    if (!markalar.has(g.marka))
+      markalar.set(g.marka, { fiyatlar: [], referanslar: {}, adet: 0,
+                              hacimler: new Set() });
+    const m = markalar.get(g.marka);
+    g.anaUyeler.forEach(u => {
+      if (!u.fiyat) return;
+      m.adet++;
+      m.hacimler.add(g.hacim);
+      m.fiyatlar.push(parseFloat(u.fiyat));
+      const lf = parseFloat(u.kategori1);
+      const ref = (lf > 0 && lf > parseFloat(u.fiyat)) ? String(lf) : u.fiyat;
+      m.referanslar[ref] = (m.referanslar[ref] || 0) + 1;
     });
-    const satirlar = [...markalar.entries()].map(([marka, m]) => {
-      if (!m.fiyatlar.length) return null;
-      const mod = parseFloat(Object.keys(m.referanslar)
-        .sort((a, b) => m.referanslar[b] - m.referanslar[a])[0]);
-      return { marka, mod, min: Math.min(...m.fiyatlar),
-               max: Math.max(...m.fiyatlar), adet: m.adet };
-    }).filter(Boolean).sort((a, b) => a.marka.localeCompare(b.marka, "tr"));
-    const tumFiyatlar = [...markalar.values()].flatMap(m => m.fiyatlar);
-    if (satirlar.length) paneller.push([plat, satirlar, tumFiyatlar]);
-  }
+  });
+  const satirlar = [...markalar.entries()].map(([marka, m]) => {
+    if (!m.fiyatlar.length) return null;
+    const mod = parseFloat(Object.keys(m.referanslar)
+      .sort((a, b) => m.referanslar[b] - m.referanslar[a])[0]);
+    return { marka, mod, min: Math.min(...m.fiyatlar),
+             max: Math.max(...m.fiyatlar), adet: m.adet,
+             hacimler: [...m.hacimler]
+               .sort((a, b) => parseInt(a) - parseInt(b)).join(", ") };
+  }).filter(Boolean).sort((a, b) => a.marka.localeCompare(b.marka, "tr"));
   const kutu = document.getElementById("karsCikti");
-  if (!paneller.length) {
+  if (!satirlar.length) {
     kutu.innerHTML = `<div class="karsNot">Bu kesitte takip edilen ürün yok.</div>`;
     return;
   }
-  kutu.innerHTML = paneller.map(([plat, satirlar, tumF]) => {
-    const hepsi = satirlar.flatMap(s => [s.min, s.max, s.mod]);
-    if (benim) hepsi.push(benim);
-    const lo = Math.min(...hepsi) * 0.95, hi = Math.max(...hepsi) * 1.05;
-    const x = f => ((f - lo) / (hi - lo) * 100).toFixed(1) + "%";
-    const gen = f => (f / (hi - lo) * 100).toFixed(1) + "%";
-    const ort = tumF.reduce((a, b) => a + b, 0) / tumF.length;
-    const tMin = Math.min(...tumF), tMax = Math.max(...tumF);
-    return `
-      <div class="karsBaslik">${hBaslik} · ${t} · ${plat}</div>
-      <div class="karsNot">${satirlar.length} marka · ${satirlar.reduce((a, s) => a + s.adet, 0)} fiyatlı kayıt</div>
-      <table class="karsTablo">
-        <tr><th>Marka</th><th>Grup fiyatı</th><th>En düşük</th>
-            <th style="width:45%">Fiyat konumu</th></tr>
-        <tr class="karsTumu">
-          <td><b>Tümü</b> <span class="adet">(${tumF.length})</span></td>
-          <td title="kesitteki tüm fiyatlı kayıtların ortalaması">ort. ${tl(Math.round(ort))}</td>
-          <td>${tl(tMin)} – ${tl(tMax)}</td>
-          <td><div class="bant">
-            <div class="bantAralik" style="left:${x(tMin)};width:${gen(tMax - tMin)}"></div>
-            <div class="bantMod" style="left:${x(ort)}" title="ortalama"></div>
-            ${benim ? `<div class="bantBenim" style="left:${x(benim)}"></div>` : ""}
-          </div>
-          <div class="bantEksen"><span>${tl(Math.round(lo))}</span><span>${tl(Math.round(hi))}</span></div></td>
-        </tr>
-        ${satirlar.map(s => `
-        <tr>
-          <td><b>${s.marka}</b> <span class="adet">(${s.adet})</span></td>
-          <td>${tl(s.mod)}</td>
-          <td>${s.min < s.mod ? tl(s.min) : "—"}</td>
-          <td><div class="bant">
-            <div class="bantAralik" style="left:${x(s.min)};width:${gen(s.max - s.min)}"></div>
-            <div class="bantMod" style="left:${x(s.mod)}"></div>
-            ${benim ? `<div class="bantBenim" style="left:${x(benim)}"></div>` : ""}
-          </div>
-          <div class="bantEksen"><span>${tl(Math.round(lo))}</span><span>${tl(Math.round(hi))}</span></div></td>
-        </tr>`).join("")}
-      </table>`;
-  }).join("");
+  const tumF = [...markalar.values()].flatMap(m => m.fiyatlar);
+  const hepsi = satirlar.flatMap(s => [s.min, s.max, s.mod]);
+  if (benim) hepsi.push(benim);
+  const lo = Math.min(...hepsi) * 0.95, hi = Math.max(...hepsi) * 1.05;
+  const x = f => ((f - lo) / (hi - lo) * 100).toFixed(1) + "%";
+  const gen = f => (f / (hi - lo) * 100).toFixed(1) + "%";
+  const ort = tumF.reduce((a, b) => a + b, 0) / tumF.length;
+  const tMin = Math.min(...tumF), tMax = Math.max(...tumF);
+  const bant = (mn, mx, isaret) => `<div class="bant">
+      <div class="bantAralik" style="left:${x(mn)};width:${gen(mx - mn)}"></div>
+      <div class="bantMod" style="left:${x(isaret)}"></div>
+      ${benim ? `<div class="bantBenim" style="left:${x(benim)}"></div>` : ""}
+    </div>
+    <div class="bantEksen"><span>${tl(Math.round(lo))}</span><span>${tl(Math.round(hi))}</span></div>`;
+  kutu.innerHTML = `
+    <div class="karsBaslik">${hBaslik} · ${t} · ${p || "tüm platformlar"}</div>
+    <div class="karsNot">${satirlar.length} marka · ${tumF.length} fiyatlı kayıt</div>
+    <table class="karsTablo">
+      <tr><th>Marka</th><th>Grup fiyatı</th><th>En düşük</th>
+          <th style="width:45%">Fiyat konumu</th></tr>
+      <tr class="karsTumu">
+        <td><b>Tümü</b> <span class="adet">(${tumF.length})</span></td>
+        <td title="kesitteki tüm fiyatlı kayıtların ortalaması">ort. ${tl(Math.round(ort))}</td>
+        <td>${tl(tMin)} – ${tl(tMax)}</td>
+        <td>${bant(tMin, tMax, ort)}</td>
+      </tr>
+      ${satirlar.map(s => `
+      <tr>
+        <td><b>${s.marka}</b> <span class="adet">(${s.adet}) · ${s.hacimler}</span></td>
+        <td>${tl(s.mod)}</td>
+        <td>${s.min < s.mod ? tl(s.min) : "—"}</td>
+        <td>${bant(s.min, s.max, s.mod)}</td>
+      </tr>`).join("")}
+    </table>`;
 }
-
 function modalKapat() {
   document.getElementById("modalArka").classList.remove("acikM");
 }
