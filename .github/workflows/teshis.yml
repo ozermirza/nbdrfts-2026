@@ -2,6 +2,8 @@
 name: Teshis araci
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "23 17,20 * * *"
 permissions:
   contents: write
 jobs:
