@@ -646,14 +646,41 @@ function karsKur() {
     <div class="karsLejant"><b style="color:var(--vurgu)">│</b> grup fiyatı
       &nbsp; ▬ min–max satış aralığı
       &nbsp; <b style="color:#34c07c">│</b> denediğin fiyat</div>`;
-  const doldur = (id, liste, hepsiEtiketi) =>
-    document.getElementById(id).innerHTML =
+  const doldur = (id, liste, hepsiEtiketi) => {
+    const e = document.getElementById(id);
+    const eskiSecim = e.value;
+    e.innerHTML =
       (hepsiEtiketi ? `<option value="">${hepsiEtiketi}</option>` : "") +
       liste.map(d => `<option value="${d}">${d}</option>`).join("");
-  doldur("karsHacim", hacimler);
+    if (liste.includes(eskiSecim) || (hepsiEtiketi && eskiSecim === ""))
+      e.value = eskiSecim;   // gecerliyse secimi koru
+  };
+  // kaskad: tur secimi hacimleri, tur+hacim platformlari daraltir
+  const hacimListesi = () => {
+    const t = document.getElementById("karsTur").value;
+    return [...new Set(gruplar.filter(g => g.tur === t && g.hacim)
+                              .map(g => g.hacim))]
+      .sort((a, b) => parseInt(a) - parseInt(b));
+  };
+  const platformListesi = () => {
+    const t = document.getElementById("karsTur").value;
+    const h = document.getElementById("karsHacim").value;
+    return [...new Set(gruplar.filter(g => g.tur === t && g.hacim === h)
+                              .map(g => g.platform))].sort();
+  };
   doldur("karsTur", turler);
-  doldur("karsPlatform", platformlar, "tüm platformlar");
-  for (const id of ["karsHacim", "karsTur", "karsPlatform", "karsBenim"])
+  doldur("karsHacim", hacimListesi());
+  doldur("karsPlatform", platformListesi(), "tüm platformlar");
+  document.getElementById("karsTur").addEventListener("input", () => {
+    doldur("karsHacim", hacimListesi());
+    doldur("karsPlatform", platformListesi(), "tüm platformlar");
+    karsCiz();
+  });
+  document.getElementById("karsHacim").addEventListener("input", () => {
+    doldur("karsPlatform", platformListesi(), "tüm platformlar");
+    karsCiz();
+  });
+  for (const id of ["karsPlatform", "karsBenim"])
     document.getElementById(id).addEventListener("input", karsCiz);
   document.getElementById("karsBtn").addEventListener("click", () =>
     document.getElementById("karsKutu").classList.toggle("acikG"));
