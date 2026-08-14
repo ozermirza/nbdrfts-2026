@@ -164,7 +164,8 @@
                background: #34c07c; }
   .bantEksen { display: flex; justify-content: space-between; color: var(--soluk);
                font-size: 11px; margin-top: 3px; }
-  .karsLejant { font-size: 12px; color: var(--soluk); padding: 4px 0 8px; }
+  .karsLejant { font-size: 12px; color: var(--soluk); padding: 0;
+                margin-left: auto; align-self: center; }
   #karsBenim::-webkit-outer-spin-button,
   #karsBenim::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   #karsBenim { -moz-appearance: textfield; appearance: textfield; }
@@ -632,11 +633,11 @@ function karsKur() {
       <select id="karsPlatform"></select>
       <input type="number" id="karsBenim" placeholder="24Bottles fiyat dene (TL)"
              style="width:190px">
+      <div class="karsLejant"><b style="color:var(--vurgu)">│</b> grup fiyatı
+        &nbsp; ▬ min–max satış aralığı
+        &nbsp; <b style="color:#34c07c">│</b> denediğin fiyat</div>
     </div>
-    <div id="karsCikti"></div>
-    <div class="karsLejant"><b style="color:var(--vurgu)">│</b> grup fiyatı
-      &nbsp; ▬ min–max satış aralığı
-      &nbsp; <b style="color:#34c07c">│</b> denediğin fiyat</div>`;
+    <div id="karsCikti"></div>`;
   const doldur = (id, liste, hepsiEtiketi) => {
     const e = document.getElementById(id);
     const eskiSecim = e.value;
