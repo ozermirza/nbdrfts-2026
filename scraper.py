@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 21)
+# FIYAT RADARI - scraper.py (surum 22)
+# 22: HEPSIBURADA GITHUB'A TASINDI - hb_robot.py surum 5'in mantigi
+#     dorduncu paralel isci oldu (xvfb sanal ekranda GORUNUR pencere;
+#     istikrar sinavi 13-14 Agustos 3/3 temiz). Mareas-CoolBottles HB
+#     magazasi da eklendi. hb_fiyatlar.csv'yi artik BU robot yazar ve
+#     arsivler; yerel robot + token emekli. Kimlikler birebir korundu.
 # 21: kidsnjoy StokYok kartlari stok_yok durumuyla kaydedilir (B6)
 # 20: PopCorner-Trixie magazasi acildi (wb=103069'lu URL GitHub'dan okunuyor,
 #     13 Agustos teshisiyle kanitlandi; 32 urun p-no ile eslesir, kesif acik)
@@ -77,6 +82,18 @@ MAGAZALAR = [
     {"ad": "Mareas-CoolBottles", "marka": "Cool Bottles", "satici": "Mareas",
      "taban": "https://www.trendyol.com/sr?lc=1193&os=1&mid=391392",
      "seriler": ["The Sport Bottle", "The Tumbler", "The Bottle"]},
+]
+
+# ---- HEPSIBURADA MAGAZALARI (surum 22) ----
+HB_DOSYA = "hb_fiyatlar.csv"
+HB_MAGAZALAR = [
+    {"marka": "Sipnjoy", "satici": "SipnJoy",
+     "taban": ("https://www.hepsiburada.com/magaza/sipnjoy"
+               "?filtreler=MainCategory.Id:367285,21005100&tab=allproducts")},
+    {"marka": "Cool Bottles", "satici": "Mareas",
+     "seriler": ["The Sport Bottle", "The Tumbler", "The Bottle"],
+     "taban": ("https://www.hepsiburada.com/magaza/mareas"
+               "?markalar=coolbottles&tab=allproducts")},
 ]
 
 
@@ -696,6 +713,189 @@ def trendyol_iscisi(urunler, simdi):
 
 # ---------------- ARSIVLEME + DOSYAYA YAZMA ----------------
 
+# ---------------- HEPSIBURADA ISCISI (surum 22) ----------------
+# hb_robot.py surum 5'ten tasindi. GitHub'da xvfb sanal ekraninda GORUNUR
+# pencere ile calisir (headless=403). Listeli urunler kodla eslesir;
+# eslesmeyenler icin tek-tek yedek; kesif "ana" sinifla sinirli
+# (HB yetiskinleri simdilik atlanir, yapilacaklar listesinde).
+
+def hb_urun_kodu(url):
+    m = re.search(r"(HB[A-Z0-9]{8,})", (url or "").upper())
+    return m.group(1) if m else None
+
+
+def hb_fiyat_bul(icerik):
+    for blok in re.findall(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        icerik, re.S,
+    ):
+        try:
+            veri = json.loads(blok.strip())
+        except json.JSONDecodeError:
+            continue
+        for aday in gez(veri):
+            offers = aday.get("offers")
+            for o in (offers if isinstance(offers, list) else [offers]):
+                if isinstance(o, dict) and (o.get("price") or o.get("lowPrice")):
+                    try:
+                        return float(str(o.get("price") or o.get("lowPrice"))
+                                     .replace(",", "."))
+                    except ValueError:
+                        continue
+    m = re.search(r'"(?:currentPrice|discountedPrice|sellingPrice|price)"\s*:\s*'
+                  r'\{?[^{}]{0,80}?"?(?:value|amount)"?\s*:?\s*'
+                  r'([0-9]+(?:[.,][0-9]{1,2})?)', icerik)
+    if m:
+        return float(m.group(1).replace(",", "."))
+    temiz = re.sub(r"\d+\s*x\s*[\d.,]+\s*TL", " ", icerik)
+    m = re.search(r"(\d{1,3}(?:\.\d{3})*(?:,\d{2})?)\s*TL", temiz)
+    if m:
+        return float(m.group(1).replace(".", "").replace(",", "."))
+    return None
+
+
+def hb_kayit(u, simdi, fiyat, durum):
+    """urunler.csv satirindan kayit (yerel robotla birebir; kimlik korunur)."""
+    return {
+        "tarih": simdi, "marka": u["marka"], "seri_adi": u["seri_adi"],
+        "varyant": "", "kategori1": u["kategori1"], "hacim": u["hacim"],
+        "kategori2": u["kategori2"], "platform": u["platform"],
+        "fiyat": fiyat if fiyat is not None else "", "durum": durum,
+        "url": u["url"].strip(), "satici": "",
+    }
+
+
+def hb_kesif_kaydi(mag, simdi, ad, fiyat, url, liste=None):
+    seri, hacim, tur = kunye(mag["marka"], ad, mag.get("seriler"))
+    return {
+        "tarih": simdi, "marka": mag["marka"], "seri_adi": seri,
+        "varyant": ad, "kategori1": liste if liste else "", "hacim": hacim,
+        "kategori2": tur, "platform": "Hepsiburada",
+        "fiyat": fiyat, "durum": "ok", "url": url, "satici": mag["satici"],
+    }
+
+
+def hb_magaza_tara(sayfa, mag):
+    """Magaza sayfalari; {hb_kodu: (fiyat, liste, ad, url)} dondurur."""
+    kartlar = {}
+    for no in range(1, 6):
+        ek = f"&sayfa={no}" if no > 1 else ""
+        try:
+            sayfa.goto(mag["taban"] + ek, timeout=60000,
+                       wait_until="domcontentloaded")
+            sayfa.wait_for_timeout(4000)
+            sayfa.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            sayfa.wait_for_timeout(2500)
+        except Exception as h:
+            print(f"[hb:{mag['satici']}] sayfa {no}: acilamadi ({h})")
+            break
+        if "erişim engellendi" in sayfa.content().lower():
+            print(f"[hb:{mag['satici']}] sayfa {no}: ENGELLENDI")
+            break
+        ham = sayfa.eval_on_selector_all(
+            "a[href*='-pm-HB'], a[href*='-p-HB']",
+            """els => els.map(e => {
+                const kap = e.closest('li') || e.closest('article') || e;
+                const img = kap.querySelector('img[alt]');
+                return {href: e.href,
+                        baslik: e.getAttribute('title')
+                                || (img ? img.getAttribute('alt') : '') || '',
+                        metin: (kap.innerText || '').slice(0, 400)};
+            })""")
+        yeni = 0
+        for k in ham:
+            kod = hb_urun_kodu(k["href"])
+            if not kod or kod in kartlar:
+                continue
+            url = k["href"].split("?")[0]
+            ad = (k["baslik"] or k["metin"].split("\n")[0]).strip()
+            guncel, liste = metin_fiyat_liste(k["metin"])
+            kartlar[kod] = (guncel, liste, ad, url)
+            yeni += 1
+        print(f"[hb:{mag['satici']}] sayfa {no}: {len(ham)} baglanti, "
+              f"{yeni} yeni kart (toplam {len(kartlar)})")
+        if yeni == 0:
+            break
+        time.sleep(random.uniform(2, 3))
+    return kartlar
+
+
+def hb_iscisi(hb_urunler, simdi, haric, yetiskin_zorla):
+    from playwright.sync_api import sync_playwright
+    sonuclar = []
+    haric_hb = {x.split("?")[0] for x in haric}
+    try:
+        kod_map = {}
+        for u in hb_urunler:
+            kod = hb_urun_kodu(u["url"])
+            if kod:
+                kod_map[kod] = u
+        islenen = set()
+        with sync_playwright() as p:
+            tarayici = p.chromium.launch(headless=False)   # xvfb GORUNUR sart
+            baglam = tarayici.new_context(
+                locale="tr-TR", user_agent=BASLIKLAR["User-Agent"])
+            sayfa = baglam.new_page()
+            for mag in HB_MAGAZALAR:
+                kartlar = hb_magaza_tara(sayfa, mag)
+                m_es = m_kesif = 0
+                for kod, (f, liste, ad, url) in kartlar.items():
+                    if kod in kod_map:
+                        if f is not None:
+                            sonuclar.append(hb_kayit(kod_map[kod], simdi,
+                                                     f, "ok"))
+                            islenen.add(kod)
+                            m_es += 1
+                    else:
+                        u_temiz = url.split("?")[0]
+                        if (f is not None and u_temiz not in haric_hb
+                                and not any(u_temiz.startswith(o)
+                                            for o in yetiskin_zorla)
+                                and sinifla(ad) == "ana"):
+                            sonuclar.append(hb_kesif_kaydi(mag, simdi, ad,
+                                                           f, url, liste))
+                            islenen.add(kod)
+                            m_kesif += 1
+                print(f"[hb:{mag['satici']}] {m_es} eslesme + {m_kesif} kesif")
+                time.sleep(random.uniform(2, 4))
+            # yedek: magazada bulunamayan listeli urunler tek tek
+            kalanlar = [kod_map[k] for k in kod_map if k not in islenen]
+            if kalanlar:
+                print(f"[hb] magazada bulunamayan {len(kalanlar)} urun "
+                      f"tek tek gezilecek")
+            for u in kalanlar:
+                f, durum = None, "ok"
+                try:
+                    sayfa.goto(u["url"].strip(), timeout=60000,
+                               wait_until="domcontentloaded")
+                    sayfa.wait_for_timeout(4000)
+                    kod = hb_urun_kodu(u["url"])
+                    if kod and kod not in sayfa.url.upper():
+                        sonuclar.append(hb_kayit(u, simdi, None,
+                                                 "urun_bulunamadi"))
+                        time.sleep(random.uniform(2, 4))
+                        continue
+                    icerik = sayfa.content()
+                    if ("erişim engellendi" in icerik.lower()
+                            or "captcha" in icerik.lower()):
+                        durum = "engellendi"
+                    else:
+                        f = hb_fiyat_bul(icerik)
+                        if f is not None and f < TABAN_FIYAT:
+                            f = None
+                        durum = "ok" if f is not None else "fiyat_bulunamadi"
+                except Exception:
+                    durum = "baglanti_hatasi"
+                sonuclar.append(hb_kayit(u, simdi, f, durum))
+                print(f"[hb] {u['seri_adi']} {u['hacim']}: {f} [{durum}]")
+                time.sleep(random.uniform(2, 4))
+            tarayici.close()
+    except Exception as h:
+        print(f"[hb] HATA: {h}")
+    print(f"[hb] toplam {len(sonuclar)} kayit")
+    return sonuclar
+
+
 def arsivle(dosya):
     """Ay degistiginde onceki ay(lar)in kayitlarini arsiv/ altina tasir."""
     import os
@@ -751,6 +951,7 @@ def main():
     simdi = datetime.now(TURKIYE_SAATI).strftime("%Y-%m-%d %H:%M")
     arsivle(ANA_DOSYA)
     arsivle(YETISKIN_DOSYA)
+    arsivle(HB_DOSYA)
     haric = haric_listesi()
     onceki_ana = onceki_kesif_urunleri(ANA_DOSYA)
     onceki_yet = onceki_kesif_urunleri(YETISKIN_DOSYA)
@@ -760,22 +961,28 @@ def main():
     with open("urunler.csv", newline="", encoding="utf-8") as f:
         tum_satirlar = [u for u in csv.DictReader(f) if (u.get("url") or "").strip()]
     trendyol_urunleri = [u for u in tum_satirlar if "trendyol" in u["url"].lower()]
+    hb_urunleri = [u for u in tum_satirlar
+                   if "hepsiburada" in u["url"].lower()]
+    yetiskin_zorla = yetiskin_listesi()
 
     gorulenler = set()
     tum = []
 
-    with ThreadPoolExecutor(max_workers=3) as havuz:
+    hb_kayitlar = []
+    with ThreadPoolExecutor(max_workers=4) as havuz:
         isler = []
         for k in KESIF:
             if k["tip"] == "shopify":
                 isler.append(havuz.submit(shopify_kesif, k, simdi, haric, gorulenler))
         isler.append(havuz.submit(kidsnjoy_iscisi, simdi, haric, gorulenler))
         isler.append(havuz.submit(trendyol_iscisi, trendyol_urunleri, simdi))
+        is_hb = havuz.submit(hb_iscisi, hb_urunleri, simdi, haric,
+                             yetiskin_zorla)
         for is_ in isler:
             tum.extend(is_.result())
+        hb_kayitlar = is_hb.result()   # ayri dosyaya yazilir, tum'e girmez
 
     # kayit siniflarina gore ayir (yetiskin.csv istisnalari uygulanir)
-    yetiskin_zorla = yetiskin_listesi()
     ana_kayitlar, yetiskin_kayitlar = [], []
     for kayit in tum:
         sinif = kayit.pop("_sinif", "ana")
@@ -805,8 +1012,9 @@ def main():
 
     dosyaya_ekle(ANA_DOSYA, ana_kayitlar)
     dosyaya_ekle(YETISKIN_DOSYA, yetiskin_kayitlar)
+    dosyaya_ekle(HB_DOSYA, hb_kayitlar)
     print(f"\nBitti: {len(ana_kayitlar)} ana + {len(yetiskin_kayitlar)} "
-          f"yetiskin kayit eklendi.")
+          f"yetiskin + {len(hb_kayitlar)} HB kayit eklendi.")
 
 
 if __name__ == "__main__":
