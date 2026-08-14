@@ -166,6 +166,13 @@
                font-size: 11px; margin-top: 3px; }
   .karsLejant { font-size: 12px; color: var(--soluk); padding: 0;
                 margin-left: auto; align-self: center; }
+  .karsCipler { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .cip { border: 1px solid var(--cizgi); background: var(--yuzey2);
+         color: var(--soluk); border-radius: 999px; padding: 5px 11px;
+         font-size: 12px; cursor: pointer; }
+  .cip:hover { border-color: var(--vurgu); color: var(--vurgu); }
+  .cip.secili { border-color: var(--vurgu); color: var(--vurgu); font-weight: 600; }
+  .karsTumu td { background: var(--yuzey2); }
   #karsBenim::-webkit-outer-spin-button,
   #karsBenim::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   #karsBenim { -moz-appearance: textfield; appearance: textfield; }
@@ -620,6 +627,7 @@ async function baslat() {
 }
 
 // ---- KARSILASTIRMA PANELI: ayni hacim+tur kesitinde markalarin konumu ----
+let karsSecili = new Set();   // secili hacim cipleri
 function karsKur() {
   const hacimler = [...new Set(gruplar.map(g => g.hacim).filter(Boolean))]
     .sort((a, b) => parseInt(a) - parseInt(b));
@@ -628,8 +636,8 @@ function karsKur() {
   const ic = document.getElementById("karsIc");
   ic.innerHTML = `
     <div class="karsSecim">
-      <select id="karsHacim"></select>
       <select id="karsTur"></select>
+      <div id="karsHacimler" class="karsCipler"></div>
       <select id="karsPlatform"></select>
       <input type="number" id="karsBenim" placeholder="24Bottles fiyat dene (TL)"
              style="width:190px">
@@ -647,7 +655,8 @@ function karsKur() {
     if (liste.includes(eskiSecim) || (hepsiEtiketi && eskiSecim === ""))
       e.value = eskiSecim;   // gecerliyse secimi koru
   };
-  // kaskad: tur secimi hacimleri, tur+hacim platformlari daraltir
+  // kaskad: tur secimi hacim ciplerini, tur+hacimler platformlari daraltir.
+  // Hacimler CIP: birden fazlasi secilebilir (450+500+550 tek panelde).
   const hacimListesi = () => {
     const t = document.getElementById("karsTur").value;
     return [...new Set(gruplar.filter(g => g.tur === t && g.hacim)
@@ -656,19 +665,32 @@ function karsKur() {
   };
   const platformListesi = () => {
     const t = document.getElementById("karsTur").value;
-    const h = document.getElementById("karsHacim").value;
-    return [...new Set(gruplar.filter(g => g.tur === t && g.hacim === h)
+    return [...new Set(gruplar.filter(g => g.tur === t && karsSecili.has(g.hacim))
                               .map(g => g.platform))].sort();
   };
+  const cipCiz = () => {
+    const liste = hacimListesi();
+    karsSecili = new Set([...karsSecili].filter(h => liste.includes(h)));
+    if (!karsSecili.size && liste.length) karsSecili.add(liste[0]);
+    document.getElementById("karsHacimler").innerHTML = liste.map(h =>
+      `<button class="cip${karsSecili.has(h) ? " secili" : ""}" data-h="${h}">${h}</button>`
+    ).join("");
+    document.querySelectorAll("#karsHacimler .cip").forEach(b =>
+      b.addEventListener("click", () => {
+        const h = b.dataset.h;
+        if (karsSecili.has(h)) {
+          if (karsSecili.size > 1) karsSecili.delete(h);   // en az bir hacim kalir
+        } else karsSecili.add(h);
+        cipCiz();
+        doldur("karsPlatform", platformListesi(), "tüm platformlar");
+        karsCiz();
+      }));
+  };
   doldur("karsTur", turler);
-  doldur("karsHacim", hacimListesi());
+  cipCiz();
   doldur("karsPlatform", platformListesi(), "tüm platformlar");
   document.getElementById("karsTur").addEventListener("input", () => {
-    doldur("karsHacim", hacimListesi());
-    doldur("karsPlatform", platformListesi(), "tüm platformlar");
-    karsCiz();
-  });
-  document.getElementById("karsHacim").addEventListener("input", () => {
+    cipCiz();
     doldur("karsPlatform", platformListesi(), "tüm platformlar");
     karsCiz();
   });
@@ -680,17 +702,18 @@ function karsKur() {
 }
 
 function karsCiz() {
-  const h = document.getElementById("karsHacim").value;
   const t = document.getElementById("karsTur").value;
   const p = document.getElementById("karsPlatform").value;
   const benim = parseFloat(document.getElementById("karsBenim").value) || null;
+  const hBaslik = [...karsSecili]
+    .sort((a, b) => parseInt(a) - parseInt(b)).join(" + ");
   const platformlar = p ? [p]
-    : [...new Set(gruplar.filter(g => g.hacim === h && g.tur === t)
+    : [...new Set(gruplar.filter(g => karsSecili.has(g.hacim) && g.tur === t)
                          .map(g => g.platform))].sort();
   const paneller = [];
   for (const plat of platformlar) {
     const kesit = gruplar.filter(g =>
-      g.hacim === h && g.tur === t && g.platform === plat);
+      karsSecili.has(g.hacim) && g.tur === t && g.platform === plat);
     const markalar = new Map();
     kesit.forEach(g => {
       if (!markalar.has(g.marka))
@@ -712,25 +735,39 @@ function karsCiz() {
       return { marka, mod, min: Math.min(...m.fiyatlar),
                max: Math.max(...m.fiyatlar), adet: m.adet };
     }).filter(Boolean).sort((a, b) => a.marka.localeCompare(b.marka, "tr"));
-    if (satirlar.length) paneller.push([plat, satirlar]);
+    const tumFiyatlar = [...markalar.values()].flatMap(m => m.fiyatlar);
+    if (satirlar.length) paneller.push([plat, satirlar, tumFiyatlar]);
   }
   const kutu = document.getElementById("karsCikti");
   if (!paneller.length) {
     kutu.innerHTML = `<div class="karsNot">Bu kesitte takip edilen ürün yok.</div>`;
     return;
   }
-  kutu.innerHTML = paneller.map(([plat, satirlar]) => {
+  kutu.innerHTML = paneller.map(([plat, satirlar, tumF]) => {
     const hepsi = satirlar.flatMap(s => [s.min, s.max, s.mod]);
     if (benim) hepsi.push(benim);
     const lo = Math.min(...hepsi) * 0.95, hi = Math.max(...hepsi) * 1.05;
     const x = f => ((f - lo) / (hi - lo) * 100).toFixed(1) + "%";
     const gen = f => (f / (hi - lo) * 100).toFixed(1) + "%";
+    const ort = tumF.reduce((a, b) => a + b, 0) / tumF.length;
+    const tMin = Math.min(...tumF), tMax = Math.max(...tumF);
     return `
-      <div class="karsBaslik">${h} · ${t} · ${plat}</div>
+      <div class="karsBaslik">${hBaslik} · ${t} · ${plat}</div>
       <div class="karsNot">${satirlar.length} marka · ${satirlar.reduce((a, s) => a + s.adet, 0)} fiyatlı kayıt</div>
       <table class="karsTablo">
         <tr><th>Marka</th><th>Grup fiyatı</th><th>En düşük</th>
             <th style="width:45%">Fiyat konumu</th></tr>
+        <tr class="karsTumu">
+          <td><b>Tümü</b> <span class="adet">(${tumF.length})</span></td>
+          <td title="kesitteki tüm fiyatlı kayıtların ortalaması">ort. ${tl(Math.round(ort))}</td>
+          <td>${tl(tMin)} – ${tl(tMax)}</td>
+          <td><div class="bant">
+            <div class="bantAralik" style="left:${x(tMin)};width:${gen(tMax - tMin)}"></div>
+            <div class="bantMod" style="left:${x(ort)}" title="ortalama"></div>
+            ${benim ? `<div class="bantBenim" style="left:${x(benim)}"></div>` : ""}
+          </div>
+          <div class="bantEksen"><span>${tl(Math.round(lo))}</span><span>${tl(Math.round(hi))}</span></div></td>
+        </tr>
         ${satirlar.map(s => `
         <tr>
           <td><b>${s.marka}</b> <span class="adet">(${s.adet})</span></td>
