@@ -629,16 +629,38 @@ async function baslat() {
       olaylar.push({ an: o.an, tip: "kalkti", metin: adBul(a) + " satıştan kalktı" }));
   });
   olaylar.sort((a, b) => b.an.localeCompare(a.an));
+  // ANLIK INDIRIM OZETI: marka x platform — "su an kacinda indirim var".
+  // Uye indirimde sayilir: etiketi var ve altinda satiliyor, YA DA
+  // gosterilen grup fiyatinin altinda satiliyor.
+  const indirimOzet = new Map();
+  gruplar.forEach(g => {
+    const gf = parseFloat(g.gosterFiyat || g.fiyat);
+    g.anaUyeler.forEach(u => {
+      if (!u.fiyat) return;
+      const f = parseFloat(u.fiyat), lf = parseFloat(u.kategori1);
+      const indirimde = (lf > 0 && lf > f)
+        || (!g.cokFiyatli && gf > 0 && f < gf);
+      if (!indirimde) return;
+      const a = g.marka + "|" + g.platform;
+      indirimOzet.set(a, (indirimOzet.get(a) || 0) + 1);
+    });
+  });
+  const ozetH = [...indirimOzet.entries()].sort((x, y) => y[1] - x[1])
+    .map(([a, n]) => {
+      const [marka, plat] = a.split("|");
+      return `<div class="olay"><span class="adet">şu an</span>
+        <span class="rozet dusus">indirim</span> ${marka} — ${plat}: ${n} üründe indirim sürüyor</div>`;
+    }).join("");
   const TIPLER = { zam: ["artis", "zam"], indirim: ["dusus", "indirim"],
                    yeni: ["yeniR", "yeni"], kalkti: ["kapandi", "kalktı"],
                    stokYok: ["kapandi", "stok bitti"],
                    stokVar: ["yeniR", "stok geldi"] };
   document.getElementById("gunlukBtn").textContent =
-    `📋 Olay günlüğü — son 7 gün (${olaylar.length})`;
-  document.getElementById("gunlukListe").innerHTML = olaylar.length
-    ? olaylar.map(o => `<div class="olay"><span class="adet">${kisaTarih(o.an)}</span>
-        <span class="rozet ${TIPLER[o.tip][0]}">${TIPLER[o.tip][1]}</span> ${o.metin}</div>`).join("")
-    : `<div class="olay">Son 7 günde kayda değer olay yok.</div>`;
+    `📋 Olay günlüğü — son 7 gün (${olaylar.length + indirimOzet.size})`;
+  const olayH = olaylar.map(o => `<div class="olay"><span class="adet">${kisaTarih(o.an)}</span>
+        <span class="rozet ${TIPLER[o.tip][0]}">${TIPLER[o.tip][1]}</span> ${o.metin}</div>`).join("");
+  document.getElementById("gunlukListe").innerHTML =
+    (ozetH + olayH) || `<div class="olay">Son 7 günde kayda değer olay yok.</div>`;
   document.getElementById("gunlukBtn").addEventListener("click", () =>
     document.getElementById("gunlukKutu").classList.toggle("acikG"));
 
