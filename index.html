@@ -130,6 +130,19 @@
   .aktifSayfa { border-color: var(--vurgu); color: var(--vurgu); font-weight: 600; }
   .rozet.liste { background: transparent; border: 1px solid #e2a93b;
                  color: #e2a93b; }
+  .rozet.yeniR { background: rgba(52,192,124,.15); color: #34c07c; }
+  .gunlukKutu { background: var(--yuzey); border: 1px solid var(--cizgi);
+                border-radius: 12px; box-shadow: var(--golge);
+                margin-bottom: 14px; }
+  .gunlukKutu > button { width: 100%; text-align: left; border: none;
+                background: none; color: var(--metin); font-size: 13px;
+                font-weight: 600; padding: 11px 14px; cursor: pointer; }
+  .gunlukKutu > button:hover { color: var(--vurgu); }
+  .gunlukListe { display: none; max-height: 240px; overflow-y: auto;
+                 border-top: 1px solid var(--cizgi); padding: 6px 14px 10px; }
+  .gunlukKutu.acikG .gunlukListe { display: block; }
+  .olay { font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--cizgi); }
+  .olay:last-child { border-bottom: none; }
 </style>
 </head>
 <body>
@@ -145,6 +158,11 @@
     <div class="kart"><div class="sayi" id="kDusen">–</div><div class="etiket">İndirimli ürün</div></div>
     <div class="kart"><div class="sayi" id="kArtan">–</div><div class="etiket">Grup üstü fiyat</div></div>
     <div class="kart"><div class="sayi" id="kHata">–</div><div class="etiket">Okunamayan</div></div>
+  </div>
+
+  <div class="gunlukKutu" id="gunlukKutu">
+    <button id="gunlukBtn">📋 Olay günlüğü — son 7 gün</button>
+    <div class="gunlukListe" id="gunlukListe"></div>
   </div>
 
   <div class="navSatir">
@@ -266,6 +284,7 @@ let durumlar = { marka: {}, platform: {}, hacim: {}, tur: {} };
 let acikGruplar = new Set();
 let gecmis = new Map();
 let grupGecmis = new Map();
+let etiketGecmis = new Map();
 let sonTurZamani = 0;
 
 const aktif = (b, d) => durumlar[b][d] !== false;
@@ -365,6 +384,28 @@ async function baslat() {
   });
   grupGecmis.forEach(l => l.sort((a, b) => a.tarih.localeCompare(b.tarih)));
 
+  // ---- yardimci haritalar: son kayit, ilk gorulme, etiket gecmisi,
+  //      fiyatsiz serinin baslangici (satista_degil / urun_bulunamadi) ----
+  const ilkTur = turlar[0];
+  const kayitBilgi = new Map(), ilkGorulme = new Map(), durumIlk = new Map();
+  etiketGecmis = new Map();
+  kayitlar.slice().sort((a, b) => a.tarih.localeCompare(b.tarih)).forEach(k => {
+    const a = kimlik(k);
+    kayitBilgi.set(a, k);
+    if (!ilkGorulme.has(a)) ilkGorulme.set(a, k.tarih);
+    const lf = parseFloat(k.kategori1);
+    if (lf > 0) {
+      if (!etiketGecmis.has(a)) etiketGecmis.set(a, []);
+      etiketGecmis.get(a).push({ tarih: k.tarih, fiyat: String(lf) });
+    }
+    if (k.fiyat) durumIlk.delete(a);
+    else if (!durumIlk.has(a)) durumIlk.set(a, k.tarih);
+  });
+  const taze = t => t && (sonTurZamani - zaman(t)) <= 72 * 3600 * 1000;
+  // ay basinda dosya sifirlanir: kurulusun ilk 48 saatinde gorulenler "yeni" sayilmaz
+  const gercektenYeni = t => t && t !== ilkTur
+    && (zaman(t) - zaman(ilkTur)) > 48 * 3600 * 1000;
+
   const sonHam = kayitlar.filter(k => k.tarih === sonTur);
   const enIyi = new Map();
   sonHam.forEach(k => {
@@ -388,6 +429,24 @@ async function baslat() {
     }
   });
 
+  son.forEach(k => {
+    const a = kimlik(k);
+    const ilk = ilkGorulme.get(a);
+    k.yeniAn = (gercektenYeni(ilk) && taze(ilk)) ? ilk : null;   // yeni urun rozeti
+    k.durumBas = k.fiyat ? null : (durumIlk.get(a) || k.tarih);
+  });
+  // satista_degil BIR KEZ yazilir; sonraki turlarda kaydi olmayan taze
+  // kalkanlar tabloda 3 gun gorunsun diye son listesine eklenir
+  const sonKimlikler = new Set(son.map(kimlik));
+  durumIlk.forEach((t, a) => {
+    if (sonKimlikler.has(a) || !taze(t)) return;
+    const k = kayitBilgi.get(a);
+    if (!k || k.fiyat) return;
+    k.yon = ""; k.oncekiFiyat = null; k.kapandi = null;
+    k.yeniAn = null; k.durumBas = t;
+    son.push(k);
+  });
+
   const sozluk = new Map();
   son.forEach(k => {
     if (!sozluk.has(grupKimlik(k))) sozluk.set(grupKimlik(k), []);
@@ -395,7 +454,8 @@ async function baslat() {
   });
   gruplar = [...sozluk.entries()].map(([anahtar, uyeler]) => {
     const ilk = uyeler[0];
-    const anaUyeler = uyeler.filter(u => !digerMi(u));
+    const anaUyeler = uyeler.filter(u => !digerMi(u) &&
+      (u.fiyat || taze(u.durumBas)));   // bayat fiyatsizlar gizlenir (3 gun)
     const digerUyeler = uyeler.filter(digerMi);
     const fiyatli = anaUyeler.filter(u => u.fiyat);
     const sayac = {};
@@ -415,8 +475,10 @@ async function baslat() {
       .sort((a, b) => refSayac[b] - refSayac[a])[0] || null;
     anaUyeler.forEach(u => u.kapandi = cokFiyatli ? null : kapanmaAni(u, mod, anahtar));
     const istisnalar = cokFiyatli
-      ? anaUyeler.filter(u => u.yon || u.kapandi)
-      : anaUyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon || u.kapandi);
+      ? anaUyeler.filter(u => u.yon || u.kapandi || u.yeniAn
+                              || (!u.fiyat && u.durumBas))
+      : anaUyeler.filter(u => (u.fiyat && u.fiyat !== mod) || u.yon || u.kapandi
+                              || u.yeniAn || (!u.fiyat && u.durumBas));
     return {
       anahtar,
       marka: ilk.marka, seri_adi: ilk.seri_adi, hacim: ilk.hacim,
@@ -429,7 +491,63 @@ async function baslat() {
       url: ilk.url, anaUyeler, digerUyeler, istisnalar,
       degisenSayi: uyeler.filter(u => u.yon && anaMi(u.satici)).length
     };
+  }).filter(g => g.anaUyeler.length + g.digerUyeler.length > 0);
+
+  // ---- OLAY GUNLUGU (son 7 gun) ----
+  const SON7 = sonTurZamani - 7 * 24 * 3600 * 1000;
+  const adBul = a => {
+    const kb = kayitBilgi.get(a);
+    return kb ? `${kb.marka} ${etiket(kb)} · ${kb.platform}` : a;
+  };
+  const olaylar = [];
+  const toplu = new Map();   // ayni grup + ayni degisim + ayni tur -> tek satir
+  gecmis.forEach((h, a) => {
+    for (let i = 1; i < h.length; i++) {
+      if (h[i].fiyat === h[i - 1].fiyat || zaman(h[i].tarih) < SON7) continue;
+      const kb = kayitBilgi.get(a);
+      const gk = kb ? grupKimlik(kb) : a;
+      const anah = [gk, h[i - 1].fiyat, h[i].fiyat, h[i].tarih].join("~");
+      if (!toplu.has(anah))
+        toplu.set(anah, { an: h[i].tarih, eski: h[i - 1].fiyat,
+                          yeni: h[i].fiyat, kb, uyeler: [] });
+      toplu.get(anah).uyeler.push(a);
+    }
   });
+  toplu.forEach(o => {
+    const artis = parseFloat(o.yeni) > parseFloat(o.eski);
+    const kim = (o.uyeler.length >= 3 && o.kb)
+      ? `${o.kb.marka} ${o.kb.seri_adi} ${o.kb.hacim} · ${o.kb.platform} — ${o.uyeler.length} ürün`
+      : adBul(o.uyeler[0]) + (o.uyeler.length > 1 ? ` (+${o.uyeler.length - 1} ürün)` : "");
+    olaylar.push({ an: o.an, tip: artis ? "zam" : "indirim",
+                   metin: `${kim}: ${tl(o.eski)} → ${tl(o.yeni)}` });
+  });
+  grupGecmis.forEach((h, gk) => {
+    for (let i = 1; i < h.length; i++) {
+      if (h[i].fiyat === h[i - 1].fiyat || zaman(h[i].tarih) < SON7) continue;
+      const artis = parseFloat(h[i].fiyat) > parseFloat(h[i - 1].fiyat);
+      olaylar.push({ an: h[i].tarih, tip: artis ? "zam" : "indirim",
+        metin: `GRUP ${gk.split("|").join(" ")}: ${tl(h[i - 1].fiyat)} → ${tl(h[i].fiyat)}` });
+    }
+  });
+  ilkGorulme.forEach((t, a) => {
+    if (gercektenYeni(t) && zaman(t) >= SON7)
+      olaylar.push({ an: t, tip: "yeni", metin: adBul(a) + " takibe girdi" });
+  });
+  durumIlk.forEach((t, a) => {
+    if (ilkGorulme.get(a) !== ilkTur && zaman(t) >= SON7)
+      olaylar.push({ an: t, tip: "kalkti", metin: adBul(a) + " satıştan kalktı" });
+  });
+  olaylar.sort((a, b) => b.an.localeCompare(a.an));
+  const TIPLER = { zam: ["artis", "zam"], indirim: ["dusus", "indirim"],
+                   yeni: ["yeniR", "yeni"], kalkti: ["kapandi", "kalktı"] };
+  document.getElementById("gunlukBtn").textContent =
+    `📋 Olay günlüğü — son 7 gün (${olaylar.length})`;
+  document.getElementById("gunlukListe").innerHTML = olaylar.length
+    ? olaylar.map(o => `<div class="olay"><span class="adet">${kisaTarih(o.an)}</span>
+        <span class="rozet ${TIPLER[o.tip][0]}">${TIPLER[o.tip][1]}</span> ${o.metin}</div>`).join("")
+    : `<div class="olay">Son 7 günde kayda değer olay yok.</div>`;
+  document.getElementById("gunlukBtn").addEventListener("click", () =>
+    document.getElementById("gunlukKutu").classList.toggle("acikG"));
 
   document.getElementById("sonGuncelleme").textContent =
     "Son güncelleme: " + sonTur + " · robot her saat XX:23'te tarar (01-05 hariç)";
@@ -502,7 +620,10 @@ function detaySatiri(d, g) {
   let rozet = "", tarihH = "";
   const gf = g.gosterFiyat || g.fiyat;   // uye kiyaslari gosterilen fiyata gore
   const an = kisaTarih(degisimAni(d));
-  if (d.kapandi) {
+  if (!d.fiyat && d.durumBas) {
+    rozet = `<span class="rozet kapandi">satıştan kalktı</span>`;
+    tarihH = kisaTarih(d.durumBas);
+  } else if (d.kapandi) {
     rozet = `<span class="rozet kapandi">indirim kapandı</span>`;
     tarihH = kisaTarih(d.kapandi);
   } else if (d.yon === "dusus") {
@@ -516,6 +637,10 @@ function detaySatiri(d, g) {
     const dus = parseFloat(d.fiyat) < parseFloat(gf);
     rozet = `<span class="rozet ${dus ? "dusus" : "artis"}">${dus ? "▼" : "▲"} ${tl(gf)} → ${tl(d.fiyat)}</span>`;
     tarihH = an || "";
+  }
+  if (d.yeniAn) {
+    rozet = `<span class="rozet yeniR">yeni ürün</span> ` + rozet;
+    if (!tarihH) tarihH = kisaTarih(d.yeniAn);
   }
   let yuzdeH = "";
   const listeF = parseFloat(d.kategori1);
@@ -582,6 +707,11 @@ function ciz() {
               : String(x).localeCompare(String(y), "tr");
       return s * siralama.yon;
     });
+  } else {
+    liste = [...liste].sort((a, b) =>
+      a.marka.localeCompare(b.marka, "tr")
+      || a.seri_adi.localeCompare(b.seri_adi, "tr")
+      || String(a.hacim).localeCompare(String(b.hacim), "tr"));
   }
 
   document.getElementById("tabloGovde").innerHTML = liste.map(g => {
@@ -642,6 +772,7 @@ function sonDeger(liste, z) {
 function grafikAc(kim, grupAnahtari, baslik, isaret = null) {
   const urunH = kim ? (gecmis.get(kim) || []) : [];
   const grupH = grupGecmis.get(grupAnahtari) || [];
+  const etikH = kim ? (etiketGecmis.get(kim) || []) : [];
   if (!urunH.length && !grupH.length) return;
 
   document.getElementById("modalBaslik").textContent = baslik;
@@ -660,7 +791,7 @@ function grafikAc(kim, grupAnahtari, baslik, isaret = null) {
   const rVurgu = stil.getPropertyValue("--vurgu").trim();
   const rCizgi = stil.getPropertyValue("--cizgi").trim();
 
-  const hepsi = urunH.concat(grupH);
+  const hepsi = urunH.concat(grupH, etikH);
   const t0 = Math.min(...hepsi.map(n => zaman(n.tarih)));
   const t1 = Math.max(...hepsi.map(n => zaman(n.tarih)));
   const fList = hepsi.map(n => parseFloat(n.fiyat));
@@ -705,6 +836,7 @@ function grafikAc(kim, grupAnahtari, baslik, isaret = null) {
   }
 
   seriCiz(grupH, rSoluk, true, 1.5);
+  seriCiz(etikH, "#e2a93b", true, 1.5);   // satici etiket fiyati
   seriCiz(urunH, rVurgu, false, 2.5);
 
   const kaynak = urunH.length ? urunH : grupH;
@@ -727,6 +859,8 @@ function grafikAc(kim, grupAnahtari, baslik, isaret = null) {
     const satirlar = [kisaTarih(new Date(isaret).toISOString().slice(0, 16).replace("T", " "))];
     if (uN) satirlar.push("Ürün: " + tl(uN.fiyat));
     if (gN) satirlar.push("Grup: " + tl(gN.fiyat));
+    const eN = sonDeger(etikH, isaret);
+    if (eN) satirlar.push("Etiket: " + tl(eN.fiyat));
     x.font = "11px sans-serif";
     const gen = Math.max(...satirlar.map(s => x.measureText(s).width)) + 16;
     const yuk = satirlar.length * 15 + 10;
