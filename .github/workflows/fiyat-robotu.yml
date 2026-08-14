@@ -2,12 +2,12 @@
 name: Fiyat robotu
 on:
   # Zamanlama UTC ile yazilir. Turkiye = UTC+3.
-  # "0 5-19/2 * * *" -> TR saatiyle 08:00-22:00 arasi 2 saatte bir calis.
+  # "23 3-21 * * *" -> TR saatiyle 06:23-00:23 arasi her saat XX:23.
   schedule:
     - cron: "23 3-21 * * *"
   # Actions sekmesinden elle baslatma dugmesi (testler icin):
   workflow_dispatch:
-# Robotun sonuc dosyasini repoya kaydedebilmesi icin yazma izni:
+# Robotun sonuc dosyalarini repoya kaydedebilmesi icin yazma izni:
 permissions:
   contents: write
 jobs:
@@ -20,12 +20,13 @@ jobs:
           python-version: "3.12"
       - run: pip install requests playwright
       - run: playwright install --with-deps chromium
-      - run: python scraper.py             # robotu calistir
-      - name: Sonuclari kaydet             # fiyatlar.csv'yi repoya isle
+      # surum 22: HB gorunur pencere ister -> xvfb sanal ekran
+      - run: xvfb-run --auto-servernum python scraper.py
+      - name: Sonuclari kaydet
         run: |
           git config user.name "fiyat-robotu"
           git config user.email "robot@users.noreply.github.com"
-          git add fiyatlar.csv yetiskin_fiyatlar.csv
+          git add fiyatlar.csv yetiskin_fiyatlar.csv hb_fiyatlar.csv
           git add arsiv 2>/dev/null || true
           git diff --cached --quiet || git commit -m "Otomatik fiyat guncellemesi"
           git pull --rebase origin main || (sleep 20 && git pull --rebase origin main)
