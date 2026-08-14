@@ -502,8 +502,9 @@ async function baslat() {
   gruplar = [...sozluk.entries()].map(([anahtar, uyeler]) => {
     const ilk = uyeler[0];
     const anaUyeler = uyeler.filter(u => !digerMi(u) &&
-      (u.fiyat || u.durum === "stok_yok"   // stok bilgisi kalici gorunur
-       || taze(u.durumBas)));   // diger bayat fiyatsizlar gizlenir (3 gun)
+      (u.fiyat || (u.durum !== "stok_yok" && taze(u.durumBas))));
+    // stok_yok kayitlari TABLODA HIC gosterilmez (kullanici karari, 14.08);
+    // stok hareketi yalnizca olay gunlugunde marka bazli gorunur.
     const digerUyeler = uyeler.filter(digerMi);
     const fiyatli = anaUyeler.filter(u => u.fiyat);
     const sayac = {};
