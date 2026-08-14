@@ -417,6 +417,7 @@ async function baslat() {
   //      fiyatsiz serinin baslangici (satista_degil / urun_bulunamadi) ----
   const ilkTur = turlar[0];
   const kayitBilgi = new Map(), ilkGorulme = new Map(), durumIlk = new Map();
+  const stokDonus = [];   // stok_yok'tan fiyatliya donus anlari
   etiketGecmis = new Map();
   kayitlar.slice().sort((a, b) => a.tarih.localeCompare(b.tarih)).forEach(k => {
     const a = kimlik(k);
@@ -427,8 +428,13 @@ async function baslat() {
       if (!etiketGecmis.has(a)) etiketGecmis.set(a, []);
       etiketGecmis.get(a).push({ tarih: k.tarih, fiyat: String(lf) });
     }
-    if (k.fiyat) durumIlk.delete(a);
-    else if (!durumIlk.has(a)) durumIlk.set(a, k.tarih);
+    if (k.fiyat) {
+      const onceki = durumIlk.get(a);
+      if (onceki && onceki.durum === "stok_yok")
+        stokDonus.push({ an: k.tarih, a });
+      durumIlk.delete(a);
+    } else if (!durumIlk.has(a))
+      durumIlk.set(a, { t: k.tarih, durum: k.durum });
   });
   const taze = t => t && (sonTurZamani - zaman(t)) <= 72 * 3600 * 1000;
   // ay basinda dosya sifirlanir: kurulusun ilk 48 saatinde gorulenler "yeni" sayilmaz
@@ -464,7 +470,7 @@ async function baslat() {
     k.yeniAn = null;   // yeni urun rozeti KAPALI (kullanici karari, 14.08);
     // acmak icin: k.yeniAn = (gercektenYeni(ilk) && taze(ilk)) ? ilk : null;
     void ilk;
-    k.durumBas = k.fiyat ? null : (durumIlk.get(a) || k.tarih);
+    k.durumBas = k.fiyat ? null : ((durumIlk.get(a) || {}).t || k.tarih);
   });
   const yeniSayac = new Map();
   son.forEach(k => {
@@ -479,12 +485,12 @@ async function baslat() {
   // satista_degil BIR KEZ yazilir; sonraki turlarda kaydi olmayan taze
   // kalkanlar tabloda 3 gun gorunsun diye son listesine eklenir
   const sonKimlikler = new Set(son.map(kimlik));
-  durumIlk.forEach((t, a) => {
-    if (sonKimlikler.has(a) || !taze(t)) return;
+  durumIlk.forEach((v, a) => {
+    if (sonKimlikler.has(a) || !taze(v.t)) return;
     const k = kayitBilgi.get(a);
     if (!k || k.fiyat) return;
     k.yon = ""; k.oncekiFiyat = null; k.kapandi = null;
-    k.yeniAn = null; k.durumBas = t;
+    k.yeniAn = null; k.durumBas = v.t;
     son.push(k);
   });
 
@@ -496,7 +502,8 @@ async function baslat() {
   gruplar = [...sozluk.entries()].map(([anahtar, uyeler]) => {
     const ilk = uyeler[0];
     const anaUyeler = uyeler.filter(u => !digerMi(u) &&
-      (u.fiyat || taze(u.durumBas)));   // bayat fiyatsizlar gizlenir (3 gun)
+      (u.fiyat || u.durum === "stok_yok"   // stok bilgisi kalici gorunur
+       || taze(u.durumBas)));   // diger bayat fiyatsizlar gizlenir (3 gun)
     const digerUyeler = uyeler.filter(digerMi);
     const fiyatli = anaUyeler.filter(u => u.fiyat);
     const sayac = {};
@@ -570,13 +577,40 @@ async function baslat() {
   // "takibe girdi" olaylari KAPALI (kullanici karari, 14.08) —
   // gunlugu bogdugu icin yeni urun bildirimi uretmiyoruz.
   const kalkanGrup = new Map();
-  durumIlk.forEach((t, a) => {
-    if (ilkGorulme.get(a) === ilkTur || zaman(t) < SON7) return;
+  durumIlk.forEach((v, a) => {
+    if (v.durum === "stok_yok") return;   // stok olaylari ayri islenir
+    if (ilkGorulme.get(a) === ilkTur || zaman(v.t) < SON7) return;
     const kb = kayitBilgi.get(a);
-    const anah = (kb ? grupKimlik(kb) : a) + "@" + t;
-    if (!kalkanGrup.has(anah)) kalkanGrup.set(anah, { an: t, kb, uyeler: [] });
+    const anah = (kb ? grupKimlik(kb) : a) + "@" + v.t;
+    if (!kalkanGrup.has(anah)) kalkanGrup.set(anah, { an: v.t, kb, uyeler: [] });
     kalkanGrup.get(anah).uyeler.push(a);
   });
+  // stok olaylari: marka + tur bazinda toplu (zamlar gibi)
+  const stokToplu = new Map();
+  durumIlk.forEach((v, a) => {
+    if (v.durum !== "stok_yok" || zaman(v.t) < SON7) return;
+    if (ilkGorulme.get(a) === v.t) return;   // hic stokta gorulmedi, olay sayilmaz
+    const kb = kayitBilgi.get(a);
+    const anah = (kb ? kb.marka : "?") + "~" + v.t;
+    if (!stokToplu.has(anah))
+      stokToplu.set(anah, { an: v.t, marka: kb ? kb.marka : "?", n: 0, ilkA: a });
+    stokToplu.get(anah).n++;
+  });
+  stokToplu.forEach(o => olaylar.push({ an: o.an, tip: "stokYok",
+    metin: o.n === 1 ? adBul(o.ilkA) + " stoğu tükendi"
+                     : `${o.marka} — ${o.n} üründe stok tükendi` }));
+  const donusToplu = new Map();
+  stokDonus.forEach(d => {
+    if (zaman(d.an) < SON7) return;
+    const kb = kayitBilgi.get(d.a);
+    const anah = (kb ? kb.marka : "?") + "~" + d.an;
+    if (!donusToplu.has(anah))
+      donusToplu.set(anah, { an: d.an, marka: kb ? kb.marka : "?", n: 0, ilkA: d.a });
+    donusToplu.get(anah).n++;
+  });
+  donusToplu.forEach(o => olaylar.push({ an: o.an, tip: "stokVar",
+    metin: o.n === 1 ? adBul(o.ilkA) + " stoğa döndü"
+                     : `${o.marka} — ${o.n} ürün stoğa döndü` }));
   kalkanGrup.forEach(o => {
     if (o.uyeler.length >= 3 && o.kb)
       olaylar.push({ an: o.an, tip: "kalkti",
@@ -586,7 +620,9 @@ async function baslat() {
   });
   olaylar.sort((a, b) => b.an.localeCompare(a.an));
   const TIPLER = { zam: ["artis", "zam"], indirim: ["dusus", "indirim"],
-                   yeni: ["yeniR", "yeni"], kalkti: ["kapandi", "kalktı"] };
+                   yeni: ["yeniR", "yeni"], kalkti: ["kapandi", "kalktı"],
+                   stokYok: ["kapandi", "stok bitti"],
+                   stokVar: ["yeniR", "stok geldi"] };
   document.getElementById("gunlukBtn").textContent =
     `📋 Olay günlüğü — son 7 gün (${olaylar.length})`;
   document.getElementById("gunlukListe").innerHTML = olaylar.length
@@ -819,7 +855,10 @@ function detaySatiri(d, g) {
   let rozet = "", tarihH = "";
   const gf = g.gosterFiyat || g.fiyat;   // uye kiyaslari gosterilen fiyata gore
   const an = kisaTarih(degisimAni(d));
-  if (!d.fiyat && d.durumBas) {
+  if (!d.fiyat && d.durum === "stok_yok") {
+    rozet = `<span class="rozet kapandi">stokta yok</span>`;
+    tarihH = kisaTarih(d.durumBas || d.tarih);
+  } else if (!d.fiyat && d.durumBas) {
     rozet = `<span class="rozet kapandi">satıştan kalktı</span>`;
     tarihH = kisaTarih(d.durumBas);
   } else if (d.kapandi) {
