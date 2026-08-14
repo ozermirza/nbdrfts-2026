@@ -423,7 +423,9 @@ async function baslat() {
   son.forEach(k => {
     const a = kimlik(k);
     const ilk = ilkGorulme.get(a);
-    k.yeniAn = (gercektenYeni(ilk) && taze(ilk)) ? ilk : null;   // yeni urun rozeti
+    k.yeniAn = null;   // yeni urun rozeti KAPALI (kullanici karari, 14.08);
+    // acmak icin: k.yeniAn = (gercektenYeni(ilk) && taze(ilk)) ? ilk : null;
+    void ilk;
     k.durumBas = k.fiyat ? null : (durumIlk.get(a) || k.tarih);
   });
   const yeniSayac = new Map();
@@ -534,21 +536,8 @@ async function baslat() {
         metin: `GRUP ${gk.split("|").join(" ")}: ${tl(h[i - 1].fiyat)} → ${tl(h[i].fiyat)}` });
     }
   });
-  const yeniGrup = new Map();
-  ilkGorulme.forEach((t, a) => {
-    if (!gercektenYeni(t) || zaman(t) < SON7) return;
-    const kb = kayitBilgi.get(a);
-    const anah = (kb ? grupKimlik(kb) : a) + "@" + t;
-    if (!yeniGrup.has(anah)) yeniGrup.set(anah, { an: t, kb, uyeler: [] });
-    yeniGrup.get(anah).uyeler.push(a);
-  });
-  yeniGrup.forEach(o => {
-    if (o.uyeler.length >= 3 && o.kb)
-      olaylar.push({ an: o.an, tip: "yeni",
-        metin: `${o.kb.marka} ${o.kb.seri_adi} ${o.kb.hacim} · ${o.kb.platform} — ${o.uyeler.length} kayıt takibe girdi` });
-    else o.uyeler.forEach(a =>
-      olaylar.push({ an: o.an, tip: "yeni", metin: adBul(a) + " takibe girdi" }));
-  });
+  // "takibe girdi" olaylari KAPALI (kullanici karari, 14.08) —
+  // gunlugu bogdugu icin yeni urun bildirimi uretmiyoruz.
   const kalkanGrup = new Map();
   durumIlk.forEach((t, a) => {
     if (ilkGorulme.get(a) === ilkTur || zaman(t) < SON7) return;
