@@ -507,7 +507,11 @@ async function baslat() {
   const SON7 = sonTurZamani - 7 * 24 * 3600 * 1000;
   const adBul = a => {
     const kb = kayitBilgi.get(a);
-    return kb ? `${kb.marka} ${etiket(kb)} · ${kb.platform}` : a;
+    if (!kb) return a;
+    const ad = etiket(kb);
+    const on = ad.toLowerCase().startsWith((kb.marka || "").toLowerCase())
+      ? "" : kb.marka + " ";   // ad zaten markayla basliyorsa tekrar yazma
+    return `${on}${ad} · ${kb.platform}`;
   };
   const olaylar = [];
   const toplu = new Map();   // ayni grup + ayni degisim + ayni tur -> tek satir
