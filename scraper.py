@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# FIYAT RADARI - scraper.py (surum 20)
+# FIYAT RADARI - scraper.py (surum 21)
+# 21: kidsnjoy StokYok kartlari stok_yok durumuyla kaydedilir (B6)
 # 20: PopCorner-Trixie magazasi acildi (wb=103069'lu URL GitHub'dan okunuyor,
 #     13 Agustos teshisiyle kanitlandi; 32 urun p-no ile eslesir, kesif acik)
 # 19: kidsnjoy ?sayfa= dongusu + Trendyol magazalarina taze baglam
@@ -320,14 +321,23 @@ def kidsnjoy_iscisi(simdi, haric, gorulenler):
                             continue          # onceki sayfanin tekrari
                         kat_gorulen.add(url)
                         yeni_gorulen += 1
-                        if kk["stokYok"]:
-                            kat_stoksuz += 1
-                            continue
                         if url in haric or url in gorulenler:
                             continue
                         ad = (kk["baslik"] or kk["metin"].split("\n")[0]).strip()
                         sinif = sinif_zorla or sinifla(ad)
                         if sinif is None:
+                            continue
+                        if kk["stokYok"]:
+                            kat_stoksuz += 1
+                            gorulenler.add(url)
+                            seri, hacim, tur = kunye(KIDSNJOY["marka"], ad)
+                            sonuclar.append(kayit_yap(simdi, KIDSNJOY["marka"],
+                                                      seri, ad, hacim, tur,
+                                                      KIDSNJOY["platform"], None,
+                                                      "stok_yok", url,
+                                                      KIDSNJOY["satici"],
+                                                      sinif=sinif))
+                            kat_kayit += 1
                             continue
                         guncel, liste = metin_fiyat_liste(kk["metin"])
                         if guncel is None:
